@@ -1,0 +1,54 @@
+# Chat zwischen gematchten Nutzern: Nachrichten lesen und senden (REST).
+# WebSocket-Endpunkt ist vorbereitet für Echtzeit-Chat in Sprint 2 –
+# aktuell funktioniert er als einfacher Echo-Server zum Testen.
+from uuid import UUID
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
+from app.core.database import get_db
+from app.models.user import User
+from app.models.message import Message
+from app.schemas.chat import MessageCreate, MessageResponse
+
+router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+@router.get("/{match_id}/messages", response_model=list[MessageResponse])
+def get_messages(
+    match_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(Message)
+        .filter(Message.match_id == match_id)
+        .order_by(Message.sent_at)
+        .all()
+    )
+
+
+@router.post("/{match_id}/messages", response_model=MessageResponse, status_code=201)
+def send_message(
+    match_id: UUID,
+    payload: MessageCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    msg = Message(match_id=match_id, sender_id=current_user.id, content=payload.content)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg
+
+
+@router.websocket("/ws/{match_id}")
+async def websocket_chat(match_id: UUID, websocket: WebSocket):
+    # Sprint 2: Connection-Manager für mehrere gleichzeitige Verbindungen einbauen
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await websocket.send_text(data)
+    except WebSocketDisconnect:
+        pass

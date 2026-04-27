@@ -1,12 +1,12 @@
 # Schemas für Registrierung, Login und Token-Antwort.
 # Pydantic validiert automatisch: ist die Email gültig? Sind alle Pflichtfelder da?
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):
-    alias: str
+    alias: str = Field(min_length=2, max_length=50)
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
     studiengang: str | None = None
 
 

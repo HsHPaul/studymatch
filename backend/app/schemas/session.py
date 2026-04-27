@@ -1,8 +1,10 @@
-# Schemas für Lerntreffen (erstellen und abfragen).
-# raum_id ist optional – ein Treffen kann auch ohne festen Raum geplant werden.
+# Schemas für Lerntreffen.
 from uuid import UUID
 from datetime import date, time
 from pydantic import BaseModel
+
+from app.models.enums import SessionStatus
+from app.schemas.base import OrmBase
 
 
 class StudySessionCreate(BaseModel):
@@ -12,12 +14,10 @@ class StudySessionCreate(BaseModel):
     raum_id: UUID | None = None
 
 
-class StudySessionResponse(BaseModel):
+class StudySessionResponse(OrmBase):
     id: UUID
     match_id: UUID
     datum: date
     uhrzeit: time
-    status: str
+    status: SessionStatus
     raum_id: UUID | None
-
-    model_config = {"from_attributes": True}

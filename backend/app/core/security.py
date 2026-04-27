@@ -20,20 +20,24 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
+_ALGORITHM = "HS256"
+
+
 def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
-    expire = datetime.utcnow() + (
+    from datetime import timezone
+    expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     )
     return jwt.encode(
         {"sub": subject, "exp": expire},
         settings.secret_key,
-        algorithm=settings.algorithm,
+        algorithm=_ALGORITHM,
     )
 
 
 def decode_token(token: str) -> Optional[str]:
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
         return payload.get("sub")
     except JWTError:
         return None

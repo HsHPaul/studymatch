@@ -1,18 +1,36 @@
-# Kernlogik des Matchings: findet passende Lernpartner für einen Nutzer.
+# Kern-Matching-Logik: findet und bewertet passende Lernpartner.
 # Pflicht: mind. 1 gemeinsames Fach + mind. 1 überlappende Verfügbarkeit.
-# Score: Fach 40% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
-from sqlalchemy.orm import Session
+from datetime import time
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.user import User
+from app.models.subject import UserSubject
 from app.models.availability import Availability
 from app.schemas.matching import MatchResponse, AvailabilityOverlap
 
+# Scoring-Gewichte (müssen zusammen 1.0 ergeben)
+WEIGHT_SUBJECT = 0.45      # 0.05 aus Lernziel-Reserve hier bis Lernziel-Feature kommt
+WEIGHT_LERNSTIL = 0.25
+WEIGHT_TIME = 0.20
+WEIGHT_STUDIENGANG = 0.10
+MAX_OVERLAP_COUNT = 3
+assert WEIGHT_SUBJECT + WEIGHT_LERNSTIL + WEIGHT_TIME + WEIGHT_STUDIENGANG == 1.0
+
 
 def find_matches(current_user: User, db: Session) -> list[MatchResponse]:
-    candidates = db.query(User).filter(User.id != current_user.id).all()
-    current_subject_ids = {us.subject_id for us in current_user.subjects}
+    candidates = (
+        db.query(User)
+        .filter(User.id != current_user.id)
+        .options(
+            selectinload(User.subjects).selectinload(UserSubject.subject),
+            selectinload(User.availabilities),
+        )
+        .all()
+    )
 
+    current_subject_ids = {us.subject_id for us in current_user.subjects}
     results = []
+
     for candidate in candidates:
         candidate_subject_ids = {us.subject_id for us in candidate.subjects}
         gemeinsame = current_subject_ids & candidate_subject_ids
@@ -54,14 +72,14 @@ def _find_time_overlaps(
         for b in avail_b:
             if a.wochentag != b.wochentag:
                 continue
-            overlap_start = max(a.start_time, b.start_time)
-            overlap_end = min(a.end_time, b.end_time)
+            overlap_start: time = max(a.start_time, b.start_time)
+            overlap_end: time = min(a.end_time, b.end_time)
             if overlap_start < overlap_end:
                 overlaps.append(
                     AvailabilityOverlap(
                         wochentag=a.wochentag,
-                        start_time=str(overlap_start),
-                        end_time=str(overlap_end),
+                        start_time=overlap_start,
+                        end_time=overlap_end,
                     )
                 )
     return overlaps
@@ -76,15 +94,14 @@ def _calculate_score(
     score = 0.0
 
     fach_score = min(len(gemeinsame_faecher) / max(len(user_a.subjects), 1), 1.0)
-    score += fach_score * 0.40
+    score += fach_score * WEIGHT_SUBJECT
 
     if user_a.lernstil and user_b.lernstil and user_a.lernstil == user_b.lernstil:
-        score += 0.25
+        score += WEIGHT_LERNSTIL
 
-    overlap_score = min(len(overlaps) / 3, 1.0)
-    score += overlap_score * 0.20
+    score += min(len(overlaps) / MAX_OVERLAP_COUNT, 1.0) * WEIGHT_TIME
 
     if user_a.studiengang and user_b.studiengang and user_a.studiengang == user_b.studiengang:
-        score += 0.10
+        score += WEIGHT_STUDIENGANG
 
     return round(score, 3)

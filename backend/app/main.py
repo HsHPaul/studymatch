@@ -1,15 +1,30 @@
 # Einstiegspunkt der FastAPI-Anwendung.
 # Registriert alle Router und globale Middleware (CORS erlaubt Anfragen vom Flutter-Frontend).
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 
 from app.api import auth, profiles, matching, chat, sessions, rooms
+from app.core.database import SessionLocal
+from app.core.limiter import limiter
+
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:8080",
+    # Flutter-Web-Dev-Server
+    "http://localhost:58530",
+]
 
 app = FastAPI(title="StudyMatch API", version="0.1.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,4 +40,14 @@ app.include_router(rooms.router, prefix="/api/v1")
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "db_unavailable"},
+        )
+    finally:
+        db.close()

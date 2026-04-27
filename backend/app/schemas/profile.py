@@ -1,18 +1,16 @@
-# Schemas für Profil-Lesen, -Bearbeiten sowie Fächer- und Zeitfenster-Verwaltung.
-# Trennt was die API nach außen zeigt von dem was in der DB steht
-# (z.B. kein hashed_password in ProfileResponse).
+# Schemas für Profil, Fächer und Zeitfenster.
 from uuid import UUID
 from datetime import time
-from typing import Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+
+from app.models.enums import Lernstil, Wochentag
+from app.schemas.base import OrmBase
 
 
-class SubjectResponse(BaseModel):
+class SubjectResponse(OrmBase):
     id: UUID
     name: str
     kuerzel: str | None = None
-
-    model_config = {"from_attributes": True}
 
 
 class SubjectAdd(BaseModel):
@@ -20,33 +18,37 @@ class SubjectAdd(BaseModel):
 
 
 class AvailabilityCreate(BaseModel):
-    wochentag: Literal["montag", "dienstag", "mittwoch", "donnerstag", "freitag", "samstag"]
+    wochentag: Wochentag
     start_time: time
     end_time: time
 
+    @field_validator("end_time")
+    @classmethod
+    def end_after_start(cls, v: time, info) -> time:
+        start = info.data.get("start_time")
+        if start is not None and v <= start:
+            raise ValueError("end_time muss nach start_time liegen")
+        return v
 
-class AvailabilityResponse(BaseModel):
+
+class AvailabilityResponse(OrmBase):
     id: UUID
-    wochentag: str
+    wochentag: Wochentag
     start_time: time
     end_time: time
-
-    model_config = {"from_attributes": True}
 
 
 class ProfileUpdate(BaseModel):
-    alias: str | None = None
+    alias: str | None = Field(default=None, min_length=2, max_length=50)
     studiengang: str | None = None
-    lernstil: Literal["still", "gemischt", "diskutierend"] | None = None
-    bio: str | None = None
+    lernstil: Lernstil | None = None
+    bio: str | None = Field(default=None, max_length=500)
 
 
-class ProfileResponse(BaseModel):
+class ProfileResponse(OrmBase):
     id: UUID
     alias: str
     email: str
     studiengang: str | None
-    lernstil: str | None
+    lernstil: Lernstil | None
     bio: str | None
-
-    model_config = {"from_attributes": True}

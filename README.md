@@ -11,7 +11,7 @@ Studierende legen ein Profil an, geben Fach, Lernstil und Verfügbarkeit an und 
 
 Dieses Projekt ist eine mobile App mit folgendem Stack:
 
-- **Frontend:** Flutter (Dart) — noch nicht implementiert
+- **Frontend:** Flutter (Dart) — Grundgerüst vollständig implementiert (Sprint 2)
 - **Backend:** Python 3.11+, FastAPI — vollständig als Grundgerüst vorhanden
 - **Datenbank:** PostgreSQL via SQLAlchemy + Alembic
 - **Auth:** JWT (python-jose + passlib/bcrypt)
@@ -31,15 +31,33 @@ backend/
 └── main.py          → FastAPI-App, Router-Registrierung, CORS
 ```
 
+### Architektur (Frontend)
+```
+frontend/lib/
+├── main.dart             → App-Einstiegspunkt (ProviderScope)
+├── core/
+│   ├── api_client.dart   → Dio + JWT-Interceptor
+│   ├── router.dart       → GoRouter (Auth-Guard, ShellRoute)
+│   └── theme.dart        → Material 3 Theme
+├── features/
+│   ├── auth/             → Login, Register, AuthNotifier (JWT in SecureStorage)
+│   ├── profile/          → Profil bearbeiten, Fächer, Zeitfenster
+│   ├── matching/         → Match-Liste mit Score, Detail-Ansicht
+│   ├── chat/             → WebSocket + REST-Fallback, Chat-UI
+│   └── sessions/         → Lerntreffen-Liste, Termin anlegen
+└── shared/
+    ├── models/           → Dart-Modelle für alle Entities
+    └── widgets/          → LoadingIndicator, ErrorView
+```
+
 ### Matching-Algorithmus
 Regelbasiert (kein ML). Pflicht: mind. 1 gemeinsames Fach + mind. 1 überlappende Verfügbarkeit.  
-Scoring: Fach 40% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
+Scoring: Fach 45% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
 
 ### Was noch fehlt (nächste Sprints)
-- Flutter-Frontend (features: auth, profile, matching, chat, sessions)
-- WebSocket-Connection-Manager für Echtzeit-Chat
-- Seed-Daten für Fächer und Räume
-- Tests (pytest)
+- `match_id` in `GET /matches`-Response ergänzen (Backend-Gap für Chat/Sessions)
+- WebSocket-Connection-Manager für Echtzeit-Chat (Sprint 3)
+- Tests (pytest Backend, flutter test Frontend)
 - GitLab CI/CD Pipeline
 
 ### Wichtige Konventionen
@@ -57,6 +75,7 @@ Scoring: Fach 40% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
 ### Voraussetzungen
 - Python 3.11+
 - Docker Desktop
+- Flutter SDK 3.x
 
 ### Backend starten
 
@@ -77,12 +96,30 @@ pip install -r requirements.txt
 # 4. Datenbankschema anlegen
 alembic upgrade head
 
-# 5. Server starten
+# 5. Testdaten einspielen (optional)
+python scripts/seed.py
+
+# 6. Server starten
 uvicorn app.main:app --reload
 ```
 
 API läuft unter: `http://localhost:8000`  
 Interaktive Dokumentation: `http://localhost:8000/docs`
+
+### Frontend starten
+
+```bash
+cd frontend
+
+# Beim ersten Mal: Platform-Dateien generieren (einmalig)
+flutter create . --project-name studymatch
+
+# Abhängigkeiten installieren
+flutter pub get
+
+# App starten (Emulator oder echtes Gerät)
+flutter run
+```
 
 ### Umgebungsvariablen (`.env`)
 

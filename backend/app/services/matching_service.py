@@ -1,5 +1,6 @@
 # Kern-Matching-Logik: findet und bewertet passende Lernpartner.
 # Pflicht: mind. 1 gemeinsames Fach + mind. 1 überlappende Verfügbarkeit.
+import math
 from datetime import time
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,7 +15,7 @@ WEIGHT_LERNSTIL = 0.25
 WEIGHT_TIME = 0.20
 WEIGHT_STUDIENGANG = 0.10
 MAX_OVERLAP_COUNT = 3
-assert WEIGHT_SUBJECT + WEIGHT_LERNSTIL + WEIGHT_TIME + WEIGHT_STUDIENGANG == 1.0
+assert math.isclose(WEIGHT_SUBJECT + WEIGHT_LERNSTIL + WEIGHT_TIME + WEIGHT_STUDIENGANG, 1.0)
 
 
 def find_matches(current_user: User, db: Session) -> list[MatchResponse]:

@@ -11,20 +11,13 @@ from app.api import auth, profiles, matching, chat, sessions, rooms
 from app.core.database import SessionLocal
 from app.core.limiter import limiter
 
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:8080",
-    # Flutter-Web-Dev-Server
-    "http://localhost:58530",
-]
-
 app = FastAPI(title="StudyMatch API", version="0.1.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"http://localhost(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

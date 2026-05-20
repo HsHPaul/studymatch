@@ -1,3 +1,5 @@
+
+
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
@@ -9,6 +11,9 @@ if config.config_file_name is not None:
 
 import app.models  # noqa: F401 – alle Modelle registrieren
 from app.models.base import Base
+from app.core.config import settings
+
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 target_metadata = Base.metadata
 

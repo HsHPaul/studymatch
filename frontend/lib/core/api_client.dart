@@ -9,6 +9,9 @@ final secureStorageProvider = Provider<FlutterSecureStorage>(
   (ref) => const FlutterSecureStorage(),
 );
 
+// Interceptor sets this to true on 401 – AuthNotifier listens and clears state.
+final sessionExpiredProvider = StateProvider<bool>((ref) => false);
+
 final dioProvider = Provider<Dio>((ref) {
   final storage = ref.read(secureStorageProvider);
 
@@ -26,7 +29,13 @@ final dioProvider = Provider<Dio>((ref) {
       }
       handler.next(options);
     },
-    onError: (error, handler) => handler.next(error),
+    onError: (error, handler) async {
+      if (error.response?.statusCode == 401) {
+        await storage.delete(key: tokenKey);
+        ref.read(sessionExpiredProvider.notifier).state = true;
+      }
+      handler.next(error);
+    },
   ));
 
   return dio;

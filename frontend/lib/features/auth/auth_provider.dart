@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/api_client.dart';
+// sessionExpiredProvider is defined in api_client.dart and imported above
 
 class AuthState {
   final String? token;
@@ -33,9 +34,13 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final FlutterSecureStorage _storage;
+  final Ref _ref;
 
-  AuthNotifier(this._storage) : super(const AuthState(isLoading: true)) {
+  AuthNotifier(this._storage, this._ref) : super(const AuthState(isLoading: true)) {
     _loadToken();
+    _ref.listen(sessionExpiredProvider, (_, expired) {
+      if (expired) state = const AuthState();
+    });
   }
 
   Future<void> _loadToken() async {
@@ -104,5 +109,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(ref.read(secureStorageProvider)),
+  (ref) => AuthNotifier(ref.read(secureStorageProvider), ref),
 );

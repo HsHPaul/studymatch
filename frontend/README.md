@@ -1,16 +1,43 @@
-# studymatch
+# StudyMatch – Frontend
 
-A new Flutter project.
+Flutter-App (Dart) für die StudyMatch-Plattform.
 
-## Getting Started
+## Starten
 
-This project is a starting point for a Flutter application.
+```bash
+# Abhängigkeiten installieren (einmalig)
+flutter pub get
 
-A few resources to get you started if this is your first Flutter project:
+# Im Browser starten
+flutter run -d chrome --web-port 3000
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+# Auf verbundenem Gerät / Simulator
+flutter run
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# Android-Build
+flutter build apk
+```
+
+## Voraussetzungen
+- Flutter SDK 3.x
+- Backend läuft auf `http://localhost:8000` (siehe `lib/core/api_client.dart`)
+
+## Struktur
+
+```
+lib/
+├── main.dart
+├── core/
+│   ├── api_client.dart   → Dio, JWT-Interceptor, 401-Logout
+│   ├── router.dart       → GoRouter, Auth-Guard
+│   └── theme.dart        → Material 3
+├── features/
+│   ├── auth/             → Login, Register, AuthNotifier
+│   ├── profile/          → Profil, Fächer, Zeitfenster
+│   ├── matching/         → Match-Liste, Detail
+│   ├── chat/             → WebSocket-Chat
+│   └── sessions/         → Lerntreffen
+└── shared/
+    ├── models/
+    └── widgets/
+```

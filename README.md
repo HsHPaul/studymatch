@@ -13,8 +13,8 @@ Dieses Projekt ist eine mobile App mit folgendem Stack:
 
 - **Frontend:** Flutter (Dart) — Grundgerüst vollständig implementiert (Sprint 2)
 - **Backend:** Python 3.11+, FastAPI — vollständig als Grundgerüst vorhanden
-- **Datenbank:** PostgreSQL via SQLAlchemy + Alembic
-- **Auth:** JWT (python-jose + passlib/bcrypt)
+- **Datenbank:** PostgreSQL via **Supabase** (Produktion) + Docker lokal
+- **Auth:** JWT (python-jose + bcrypt direkt — kein passlib)
 - **Chat:** WebSockets (FastAPI), REST-Fallback vorhanden
 - **Projektmanagement:** Jira + GitLab (GWDG)
 
@@ -36,7 +36,7 @@ backend/
 frontend/lib/
 ├── main.dart             → App-Einstiegspunkt (ProviderScope)
 ├── core/
-│   ├── api_client.dart   → Dio + JWT-Interceptor
+│   ├── api_client.dart   → Dio + JWT-Interceptor + 401-Logout
 │   ├── router.dart       → GoRouter (Auth-Guard, ShellRoute)
 │   └── theme.dart        → Material 3 Theme
 ├── features/
@@ -52,7 +52,13 @@ frontend/lib/
 
 ### Matching-Algorithmus
 Regelbasiert (kein ML). Pflicht: mind. 1 gemeinsames Fach + mind. 1 überlappende Verfügbarkeit.  
-Scoring: Fach 45% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
+Scoring: Fach 40% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10% | Lernziel 5%
+
+### Bekannte Fixes / wichtige Hinweise
+- **bcrypt:** `passlib` durch direktes `bcrypt` ersetzt (`security.py`) — passlib 1.7.4 ist inkompatibel mit bcrypt 4.x, nicht rückgängig machen
+- **401-Interceptor:** Bei abgelaufenem Token leitet die App automatisch zur Loginmaske (via `sessionExpiredProvider` in `api_client.dart`)
+- **Alembic:** `alembic.ini` hat leeres `sqlalchemy.url` — URL kommt aus `.env` über `alembic/env.py`
+- **slowapi:** muss im venv installiert sein (`pip install slowapi==0.1.9`), falls es fehlt
 
 ### Was noch fehlt (nächste Sprints)
 - `match_id` in `GET /matches`-Response ergänzen (Backend-Gap für Chat/Sessions)
@@ -73,34 +79,44 @@ Scoring: Fach 45% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
 ## Für Menschen (Quickstart)
 
 ### Voraussetzungen
-- Python 3.11+
-- Docker Desktop
+- Python 3.12
 - Flutter SDK 3.x
+- Docker Desktop (nur für lokale DB)
 
-### Backend starten
+### Backend starten (Produktion/Supabase)
 
 ```bash
 cd backend
 
-# 1. Umgebungsvariablen anlegen
+# 1. .env anlegen (einmalig – wird nicht committet)
 cp .env.example .env
+# DATABASE_URL auf Supabase-URL setzen:
+# postgresql://postgres:PASSWORT@db.flqhltziakhhkviyomzl.supabase.co:5432/postgres?sslmode=require
 
-# 2. Datenbank starten (PostgreSQL via Docker)
-docker compose up -d
-
-# 3. Python-Umgebung einrichten
+# 2. Python-Umgebung einrichten (einmalig)
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 4. Datenbankschema anlegen
-alembic upgrade head
+# 3. Migrationen ausführen (nur bei neuer DB)
+.venv/bin/alembic upgrade head
 
-# 5. Testdaten einspielen (optional)
-python scripts/seed.py
+# 4. Server starten
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
 
-# 6. Server starten
-uvicorn app.main:app --reload
+### Backend starten (lokal mit Docker)
+
+```bash
+cd backend
+
+# Docker-PostgreSQL starten
+docker compose up -d
+
+# .env auf lokale DB setzen:
+# DATABASE_URL=postgresql://studymatch:studymatch@localhost:5432/studymatch
+
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 API läuft unter: `http://localhost:8000`  
@@ -111,13 +127,13 @@ Interaktive Dokumentation: `http://localhost:8000/docs`
 ```bash
 cd frontend
 
-# Beim ersten Mal: Platform-Dateien generieren (einmalig)
-flutter create . --project-name studymatch
-
-# Abhängigkeiten installieren
+# Abhängigkeiten installieren (einmalig)
 flutter pub get
 
-# App starten (Emulator oder echtes Gerät)
+# Im Browser starten
+flutter run -d chrome --web-port 3000
+
+# Auf verbundenem Gerät
 flutter run
 ```
 
@@ -125,10 +141,24 @@ flutter run
 
 | Variable | Beschreibung | Beispiel |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL-Verbindung | `postgresql://user:pw@localhost:5432/studymatch` |
+| `DATABASE_URL` | PostgreSQL-Verbindung | `postgresql://postgres:pw@host:5432/postgres?sslmode=require` |
 | `SECRET_KEY` | JWT-Signing-Key (langer Zufallsstring) | `supersecretkey123...` |
 | `ALGORITHM` | JWT-Algorithmus | `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token-Gültigkeit | `30` |
+
+### DB-Verbindung testen
+
+```bash
+cd backend
+.venv/bin/python -c "
+from app.core.config import settings
+from sqlalchemy import create_engine, text, inspect
+engine = create_engine(settings.database_url)
+with engine.connect() as conn:
+    print('OK:', conn.execute(text('SELECT version()')).fetchone()[0][:40])
+    print('Tabellen:', inspect(engine).get_table_names())
+"
+```
 
 ### API-Endpunkte (Überblick)
 
@@ -145,7 +175,7 @@ flutter run
 | GET | `/api/v1/matches` | Passende Lernpartner abrufen |
 | GET | `/api/v1/chat/{match_id}/messages` | Chatverlauf laden |
 | POST | `/api/v1/chat/{match_id}/messages` | Nachricht senden |
-| WS | `/api/v1/chat/ws/{match_id}` | Echtzeit-Chat (Sprint 2) |
+| WS | `/api/v1/chat/ws/{match_id}` | Echtzeit-Chat |
 | POST | `/api/v1/sessions` | Lerntreffen anlegen |
 | GET | `/api/v1/sessions` | Eigene Lerntreffen abrufen |
 | GET | `/api/v1/rooms` | Verfügbare Räume abrufen |
@@ -155,19 +185,19 @@ flutter run
 
 ```bash
 # Neue DB-Migration generieren (nach Modelländerung)
-alembic revision --autogenerate -m "beschreibung"
+.venv/bin/alembic revision --autogenerate -m "beschreibung"
 
 # Migration ausführen
-alembic upgrade head
+.venv/bin/alembic upgrade head
 
 # Migration rückgängig machen
-alembic downgrade -1
+.venv/bin/alembic downgrade -1
 
 # Tests ausführen
 pytest
 
-# Datenbank zurücksetzen (Vorsicht!)
-docker compose down -v && docker compose up -d && alembic upgrade head
+# Lokale Datenbank zurücksetzen (Vorsicht!)
+docker compose down -v && docker compose up -d && .venv/bin/alembic upgrade head
 ```
 
 ---

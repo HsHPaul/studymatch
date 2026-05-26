@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/api_client.dart';
-// sessionExpiredProvider is defined in api_client.dart and imported above
+import '../../features/matching/matching_provider.dart';
+import '../../features/profile/profile_provider.dart';
+import '../../features/sessions/sessions_provider.dart';
 
 class AuthState {
   final String? token;
@@ -39,8 +41,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier(this._storage, this._ref) : super(const AuthState(isLoading: true)) {
     _loadToken();
     _ref.listen(sessionExpiredProvider, (_, expired) {
-      if (expired) state = const AuthState();
+      if (expired) {
+        _clearUserData();
+        state = const AuthState();
+      }
     });
+  }
+
+  void _clearUserData() {
+    _ref.invalidate(profileProvider);
+    _ref.invalidate(matchesProvider);
+    _ref.invalidate(sessionsProvider);
+    _ref.invalidate(allSubjectsProvider);
+    _ref.invalidate(roomsProvider);
   }
 
   Future<void> _loadToken() async {
@@ -63,6 +76,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       });
       final token = res.data['access_token'] as String;
       await _storage.write(key: tokenKey, value: token);
+      _clearUserData();
       state = AuthState(token: token);
     } on DioException catch (e) {
       final detail = e.response?.data?['detail'];
@@ -104,6 +118,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     await _storage.delete(key: tokenKey);
+    _clearUserData();
     state = const AuthState();
   }
 }

@@ -70,6 +70,8 @@ studymatch/                  ← GitLab-Repo-Root
 - **bcrypt**: `passlib` durch direktes `bcrypt` ersetzt in `backend/app/core/security.py` — passlib 1.7.4 ist inkompatibel mit bcrypt 4.x
 - **401-Interceptor**: `frontend/lib/core/api_client.dart` leitet bei abgelaufenen Tokens automatisch zur Loginmaske weiter (via `sessionExpiredProvider`)
 - **alembic.ini**: `sqlalchemy.url` ist leer — URL kommt aus `.env` über `alembic/env.py`
+- **Provider-Reset bei Login/Logout**: `AuthNotifier._clearUserData()` invalidiert alle nutzerspezifischen Provider — nicht entfernen, sonst sieht ein neuer User die Daten des vorherigen
+- **mounted-Checks**: Alle `StateNotifier`-Klassen prüfen `if (!mounted) return` nach jedem `await` — verhindert Fehler wenn Provider während eines laufenden API-Calls invalidiert wird
 
 ## Wichtige Commands
 
@@ -110,6 +112,9 @@ flutter build apk                        # Android-Build
 ## Matching-Logik (Überblick)
 Pflicht: mind. 1 gemeinsames Fach + mind. 1 überlappende Verfügbarkeit
 Scoring: Fach 40 % | Lernstil 25 % | Zeitüberlappung 20 % | Studiengang 10 % | Lernziel 5 %
+
+## Neue Endpunkte (seit Sprint 2)
+- `GET /api/v1/profiles/subjects` — alle verfügbaren Fächer aus der DB (für Fach-Picker im Profil)
 
 ## Was Claude NICHT tun soll
 - Kein ML/KI im Matching – regelbasiert reicht für MVP

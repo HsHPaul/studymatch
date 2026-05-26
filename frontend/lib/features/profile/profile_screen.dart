@@ -204,24 +204,31 @@ class _ProfileInfo extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            if (profile.studiengang != null) ...[
-              _InfoRow(
-                icon: Icons.school_outlined,
-                label: profile.studiengang!,
+            const SizedBox(height: 8),
+            _InfoRow(
+              icon: Icons.school_outlined,
+              label: profile.studiengang ?? 'Studiengang nicht angegeben',
+              muted: profile.studiengang == null,
+            ),
+            const SizedBox(height: 8),
+            _InfoRow(
+              icon: Icons.psychology_outlined,
+              label: profile.lernstil != null
+                  ? (_lernstilOptions[profile.lernstil] ?? profile.lernstil!)
+                  : 'Lernstil nicht angegeben',
+              muted: profile.lernstil == null,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              profile.bio != null && profile.bio!.isNotEmpty
+                  ? profile.bio!
+                  : 'Noch keine Bio eingetragen.',
+              style: tt.bodyMedium?.copyWith(
+                color: profile.bio != null && profile.bio!.isNotEmpty
+                    ? null
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(height: 8),
-            ],
-            if (profile.lernstil != null) ...[
-              _InfoRow(
-                icon: Icons.psychology_outlined,
-                label: _lernstilOptions[profile.lernstil] ?? profile.lernstil!,
-              ),
-              const SizedBox(height: 8),
-            ],
-            if (profile.bio != null && profile.bio!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(profile.bio!, style: tt.bodyMedium),
-            ],
+            ),
           ],
         ),
       ),
@@ -232,16 +239,25 @@ class _ProfileInfo extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
+  final bool muted;
 
-  const _InfoRow({required this.icon, required this.label});
+  const _InfoRow({required this.icon, required this.label, this.muted = false});
 
   @override
   Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
     return Row(
       children: [
-        Icon(icon, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        Icon(icon, size: 18, color: color),
         const SizedBox(width: 8),
-        Expanded(child: Text(label, style: Theme.of(context).textTheme.bodyMedium)),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: muted ? color : null,
+                ),
+          ),
+        ),
       ],
     );
   }

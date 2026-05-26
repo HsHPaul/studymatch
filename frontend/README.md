@@ -29,10 +29,10 @@ lib/
 ├── main.dart
 ├── core/
 │   ├── api_client.dart   → Dio, JWT-Interceptor, 401-Logout
-│   ├── router.dart       → GoRouter, Auth-Guard
+│   ├── router.dart       → GoRouter, Auth-Guard, HSH-Logo in AppBar
 │   └── theme.dart        → Material 3
 ├── features/
-│   ├── auth/             → Login, Register, AuthNotifier
+│   ├── auth/             → Login, Register, AuthNotifier (invalidiert alle Provider bei Login/Logout)
 │   ├── profile/          → Profil, Fächer, Zeitfenster
 │   ├── matching/         → Match-Liste, Detail
 │   ├── chat/             → WebSocket-Chat
@@ -40,4 +40,5 @@ lib/
 └── shared/
     ├── models/
     └── widgets/
-```
+assets/
+└── hsh_logo.png          → HSH-Logo, eingebunden in alle Screens

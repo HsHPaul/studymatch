@@ -45,12 +45,14 @@ class SessionsNotifier extends StateNotifier<SessionsState> {
     try {
       final dio = _ref.read(dioProvider);
       final res = await dio.get('/sessions');
+      if (!mounted) return;
       final sessions = (res.data as List)
           .map((e) => StudySession.fromJson(e as Map<String, dynamic>))
           .toList()
         ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
       state = state.copyWith(sessions: sessions, isLoading: false);
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         error: 'Termine konnten nicht geladen werden',

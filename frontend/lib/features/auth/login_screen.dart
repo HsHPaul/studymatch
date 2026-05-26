@@ -47,8 +47,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 24),
-                  Icon(Icons.school_rounded, size: 72, color: cs.primary),
+                  const SizedBox(height: 44),
+                  Image.asset('assets/hsh_logo.png', height: 120),
                   const SizedBox(height: 16),
                   Text(
                     'StudyMatch',

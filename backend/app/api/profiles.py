@@ -22,6 +22,11 @@ from app.schemas.profile import (
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
 
+@router.get("/subjects", response_model=list[SubjectResponse])
+def get_all_subjects(db: Session = Depends(get_db)):
+    return db.query(Subject).order_by(Subject.name).all()
+
+
 @router.get("/me", response_model=ProfileResponse)
 def get_my_profile(current_user: User = Depends(get_current_user)):
     return current_user

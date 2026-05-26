@@ -98,6 +98,13 @@ class _MainScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Padding(
+          padding: const EdgeInsets.only(top: 20),
+          child: Image.asset('assets/hsh_logo.png', height: 48),
+        ),
+        centerTitle: true,
+      ),
       body: child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,

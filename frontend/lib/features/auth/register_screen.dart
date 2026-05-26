@@ -45,7 +45,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Konto erstellen'),
+        title: Padding(
+          padding: const EdgeInsets.only(top: 20),
+          child: Image.asset('assets/hsh_logo.png', height: 48),
+        ),
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.go('/login'),

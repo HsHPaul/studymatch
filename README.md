@@ -172,6 +172,7 @@ with engine.connect() as conn:
 | DELETE | `/api/v1/profiles/me/subjects/{id}` | Fach entfernen |
 | POST | `/api/v1/profiles/me/availabilities` | Zeitfenster hinzufügen |
 | DELETE | `/api/v1/profiles/me/availabilities/{id}` | Zeitfenster entfernen |
+| GET | `/api/v1/profiles/subjects` | Alle verfügbaren Fächer abrufen |
 | GET | `/api/v1/matches` | Passende Lernpartner abrufen |
 | GET | `/api/v1/chat/{match_id}/messages` | Chatverlauf laden |
 | POST | `/api/v1/chat/{match_id}/messages` | Nachricht senden |

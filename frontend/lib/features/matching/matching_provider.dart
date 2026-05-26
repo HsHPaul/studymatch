@@ -15,11 +15,13 @@ class MatchesNotifier extends StateNotifier<AsyncValue<List<Match>>> {
     try {
       final dio = _ref.read(dioProvider);
       final res = await dio.get('/matches');
+      if (!mounted) return;
       final matches = (res.data as List)
           .map((e) => Match.fromJson(e as Map<String, dynamic>))
           .toList();
       state = AsyncData(matches);
     } catch (e, st) {
+      if (!mounted) return;
       state = AsyncError(e, st);
     }
   }

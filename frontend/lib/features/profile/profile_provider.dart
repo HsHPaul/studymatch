@@ -91,6 +91,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         _dio.get('/profiles/me/subjects'),
         _dio.get('/profiles/me/availabilities'),
       ]);
+      if (!mounted) return;
       state = state.copyWith(
         profile: UserProfile.fromJson(results[0].data as Map<String, dynamic>),
         mySubjects: (results[1].data as List)
@@ -102,6 +103,7 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
         isLoading: false,
       );
     } on DioException catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isLoading: false,
         error: e.response?.data?['detail']?.toString() ?? 'Laden fehlgeschlagen',
@@ -223,7 +225,7 @@ final profileProvider = StateNotifierProvider<ProfileNotifier, ProfileState>(
 
 final allSubjectsProvider = FutureProvider<List<Subject>>((ref) async {
   final dio = ref.read(dioProvider);
-  final res = await dio.get('/subjects');
+  final res = await dio.get('/profiles/subjects');
   return (res.data as List)
       .map((e) => Subject.fromJson(e as Map<String, dynamic>))
       .toList();

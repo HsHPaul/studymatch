@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/profile/profile_provider.dart';
 import '../../shared/models/match.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import 'matching_provider.dart';
@@ -33,7 +34,8 @@ class MatchListScreen extends ConsumerWidget {
         ),
         data: (matches) {
           if (matches.isEmpty) {
-            return _EmptyState();
+            final lernstil = ref.watch(profileProvider).profile?.lernstil;
+            return _EmptyState(missingLernstil: lernstil == null);
           }
           return RefreshIndicator(
             onRefresh: () => ref.read(matchesProvider.notifier).load(),
@@ -52,6 +54,10 @@ class MatchListScreen extends ConsumerWidget {
 }
 
 class _EmptyState extends StatelessWidget {
+  final bool missingLernstil;
+
+  const _EmptyState({this.missingLernstil = false});
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -78,6 +84,32 @@ class _EmptyState extends StatelessWidget {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
+            if (missingLernstil) ...[
+              const SizedBox(height: 12),
+              Card(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.onSecondaryContainer),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Dein Lernstil muss im Profil angegeben sein, bevor Matches vorgeschlagen werden können.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

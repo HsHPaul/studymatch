@@ -13,6 +13,7 @@ class AvailabilityOverlap(BaseModel):
 
 
 class MatchResponse(BaseModel):
+    match_id: UUID
     user_id: UUID
     alias: str
     studiengang: str | None

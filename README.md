@@ -11,7 +11,7 @@ Studierende legen ein Profil an, geben Fach, Lernstil und Verfügbarkeit an und 
 
 Dieses Projekt ist eine mobile App mit folgendem Stack:
 
-- **Frontend:** Flutter (Dart) — Grundgerüst vollständig implementiert (Sprint 2)
+- **Frontend:** Flutter (Dart) — vollständig implementiert inkl. eigenem Designsystem (Sprint 3)
 - **Backend:** Python 3.11+, FastAPI — vollständig als Grundgerüst vorhanden
 - **Datenbank:** PostgreSQL via **Supabase** (Produktion) + Docker lokal
 - **Auth:** JWT (python-jose + bcrypt direkt — kein passlib)
@@ -36,35 +36,51 @@ backend/
 frontend/lib/
 ├── main.dart             → App-Einstiegspunkt (ProviderScope)
 ├── core/
+│   ├── app_colors.dart   → Zentrale Farbkonstanten (AppColors, AppShadows)
 │   ├── api_client.dart   → Dio + JWT-Interceptor + 401-Logout
-│   ├── router.dart       → GoRouter (Auth-Guard, ShellRoute)
-│   └── theme.dart        → Material 3 Theme
+│   ├── router.dart       → GoRouter (Auth-Guard, ShellRoute, _StyledNavBar)
+│   └── theme.dart        → Material 3 Theme (vollständiges Designsystem)
 ├── features/
 │   ├── auth/             → Login, Register, AuthNotifier (JWT in SecureStorage)
 │   ├── profile/          → Profil bearbeiten, Fächer, Zeitfenster
-│   ├── matching/         → Match-Liste mit Score, Detail-Ansicht
+│   ├── matching/         → Match-Liste mit Score-Kreis, Detail-Ansicht
 │   ├── chat/             → WebSocket + REST-Fallback, Chat-UI
-│   └── sessions/         → Lerntreffen-Liste, Termin anlegen
+│   └── sessions/         → Lerntreffen-Liste, Mini-Kalender, Termin anlegen
 └── shared/
     ├── models/           → Dart-Modelle für alle Entities
-    └── widgets/          → LoadingIndicator, ErrorView
+    └── widgets/          → LoadingIndicator, ErrorView, StudyMatchLogo
 ```
+
+### Designsystem (Frontend)
+Alle Farben sind in `core/app_colors.dart` zentral definiert:
+
+| Konstante | Hex | Verwendung |
+|---|---|---|
+| `AppColors.primary` | `#6F35D4` | Buttons, Fokus, Navigation-Indikator |
+| `AppColors.navy` | `#0B1B3A` | Headlines, Texte |
+| `AppColors.orange` | `#F0441A` | Logo-Akzent |
+| `AppColors.background` | `#F8F8FB` | Scaffold-Hintergrund |
+| `AppColors.cardWhite` | `#FFFFFF` | Cards, Input-Felder |
+| `AppColors.muted` | `#8A8FAB` | Sekundärtexte, inaktive Icons |
 
 ### Matching-Algorithmus
 Regelbasiert (kein ML). Pflicht: mind. 1 gemeinsames Fach + mind. 1 überlappende Verfügbarkeit.  
-Scoring: Fach 40% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10% | Lernziel 5%
+Scoring: Fach 45% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
+
+`GET /matches` legt automatisch Match-Datensätze in der DB an (find-or-create), damit `POST /sessions` eine gültige `match_id` bekommt.
 
 ### Bekannte Fixes / wichtige Hinweise
 - **bcrypt:** `passlib` durch direktes `bcrypt` ersetzt (`security.py`) — passlib 1.7.4 ist inkompatibel mit bcrypt 4.x, nicht rückgängig machen
 - **401-Interceptor:** Bei abgelaufenem Token leitet die App automatisch zur Loginmaske (via `sessionExpiredProvider` in `api_client.dart`)
 - **Alembic:** `alembic.ini` hat leeres `sqlalchemy.url` — URL kommt aus `.env` über `alembic/env.py`
-- **slowapi:** muss im venv installiert sein (`pip install slowapi==0.1.9`), falls es fehlt
+- **Provider-Reset:** `AuthNotifier._clearUserData()` invalidiert alle nutzerspezifischen Provider bei Login/Logout — nicht entfernen
+- **match_id:** `GET /matches` persistiert Match-Datensätze automatisch und gibt `match_id` zurück — nötig für Session-Erstellung
 
 ### Was noch fehlt (nächste Sprints)
-- `match_id` in `GET /matches`-Response ergänzen (Backend-Gap für Chat/Sessions)
 - WebSocket-Connection-Manager für Echtzeit-Chat (Sprint 3)
 - Tests (pytest Backend, flutter test Frontend)
 - GitLab CI/CD Pipeline
+- `_isOwnMessage` in Chat korrekt implementieren (benötigt User-UUID aus Profil)
 
 ### Wichtige Konventionen
 - Code-Sprache: Englisch (Variablen, Funktionen, Commits)
@@ -135,6 +151,9 @@ flutter run -d chrome --web-port 3000
 
 # Auf verbundenem Gerät
 flutter run
+
+# Android-Build
+flutter build apk
 ```
 
 ### Umgebungsvariablen (`.env`)
@@ -173,7 +192,7 @@ with engine.connect() as conn:
 | POST | `/api/v1/profiles/me/availabilities` | Zeitfenster hinzufügen |
 | DELETE | `/api/v1/profiles/me/availabilities/{id}` | Zeitfenster entfernen |
 | GET | `/api/v1/profiles/subjects` | Alle verfügbaren Fächer abrufen |
-| GET | `/api/v1/matches` | Passende Lernpartner abrufen |
+| GET | `/api/v1/matches` | Passende Lernpartner abrufen + Match-Datensätze anlegen |
 | GET | `/api/v1/chat/{match_id}/messages` | Chatverlauf laden |
 | POST | `/api/v1/chat/{match_id}/messages` | Nachricht senden |
 | WS | `/api/v1/chat/ws/{match_id}` | Echtzeit-Chat |

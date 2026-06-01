@@ -10,6 +10,7 @@ import '../features/matching/match_detail_screen.dart';
 import '../features/matching/match_list_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/sessions/sessions_screen.dart';
+import 'app_colors.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -46,7 +47,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         builder: (_, __) => const RegisterScreen(),
       ),
-      // Full-screen chat outside the bottom-nav shell
       GoRoute(
         path: '/chat/:matchId',
         builder: (context, state) =>
@@ -98,17 +98,11 @@ class _MainScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Padding(
-          padding: const EdgeInsets.only(top: 20),
-          child: Image.asset('assets/hsh_logo.png', height: 48),
-        ),
-        centerTitle: true,
-      ),
+      backgroundColor: AppColors.background,
       body: child,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _StyledNavBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
+        onTap: (index) {
           switch (index) {
             case 0:
               context.go('/matches');
@@ -118,6 +112,36 @@ class _MainScaffold extends StatelessWidget {
               context.go('/sessions');
           }
         },
+      ),
+    );
+  }
+}
+
+class _StyledNavBar extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+
+  const _StyledNavBar({
+    required this.selectedIndex,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.cardWhite,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x18000000),
+            blurRadius: 24,
+            offset: Offset(0, -4),
+          ),
+        ],
+      ),
+      child: NavigationBar(
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onTap,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.people_outline),
@@ -139,3 +163,4 @@ class _MainScaffold extends StatelessWidget {
     );
   }
 }
+

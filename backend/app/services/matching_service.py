@@ -5,6 +5,7 @@ from datetime import time
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.user import User
+from app.models.match import Match
 from app.models.subject import UserSubject
 from app.models.availability import Availability
 from app.schemas.matching import MatchResponse, AvailabilityOverlap
@@ -48,8 +49,23 @@ def find_matches(current_user: User, db: Session) -> list[MatchResponse]:
             us.subject.name for us in candidate.subjects if us.subject_id in gemeinsame
         ]
 
+        # Find or create the Match record so the frontend has a valid match_id
+        db_match = db.query(Match).filter(
+            ((Match.user_a_id == current_user.id) & (Match.user_b_id == candidate.id)) |
+            ((Match.user_b_id == current_user.id) & (Match.user_a_id == candidate.id))
+        ).first()
+        if not db_match:
+            db_match = Match(
+                user_a_id=current_user.id,
+                user_b_id=candidate.id,
+                score=score,
+            )
+            db.add(db_match)
+            db.flush()
+
         results.append(
             MatchResponse(
+                match_id=db_match.id,
                 user_id=candidate.id,
                 alias=candidate.alias,
                 studiengang=candidate.studiengang,
@@ -60,6 +76,7 @@ def find_matches(current_user: User, db: Session) -> list[MatchResponse]:
             )
         )
 
+    db.commit()
     results.sort(key=lambda x: x.score, reverse=True)
     return results[:10]
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/app_colors.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../shared/models/subject.dart';
 import '../../shared/models/user.dart';
@@ -98,6 +99,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Mein Profil'),
         actions: [
@@ -108,27 +110,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               tooltip: 'Bearbeiten',
             ),
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout_rounded),
             onPressed: () => ref.read(authProvider.notifier).logout(),
             tooltip: 'Abmelden',
           ),
         ],
       ),
       body: RefreshIndicator(
+        color: AppColors.primary,
         onRefresh: () => ref.read(profileProvider.notifier).load(),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (ps.error != null)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
                     ps.error!,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.error),
+                    style: const TextStyle(color: AppColors.error),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -146,15 +148,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       isSaving: ps.isSaving,
                     )
                   : _ProfileInfo(profile: ps.profile!),
-              const SizedBox(height: 24),
-              _SubjectsSection(
-                mySubjects: ps.mySubjects,
-              ),
-              const SizedBox(height: 24),
-              _AvailabilitySection(
-                availabilities: ps.myAvailabilities,
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+              _SubjectsSection(mySubjects: ps.mySubjects),
+              const SizedBox(height: 20),
+              _AvailabilitySection(availabilities: ps.myAvailabilities),
             ],
           ),
         ),
@@ -162,6 +159,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 }
+
+// ── Profile Info Card ─────────────────────────────────────────────────────────
 
 class _ProfileInfo extends StatelessWidget {
   final UserProfile profile;
@@ -171,66 +170,77 @@ class _ProfileInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 32,
-                  backgroundColor: cs.primaryContainer,
-                  child: Text(
-                    profile.alias[0].toUpperCase(),
-                    style: tt.headlineMedium?.copyWith(color: cs.onPrimaryContainer),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 36,
+                backgroundColor: AppColors.primaryLight,
+                child: Text(
+                  profile.alias[0].toUpperCase(),
+                  style: tt.headlineMedium?.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(profile.alias, style: tt.titleLarge),
-                      Text(profile.email,
-                          style: tt.bodyMedium
-                              ?.copyWith(color: cs.onSurfaceVariant)),
-                    ],
-                  ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(profile.alias, style: tt.titleLarge),
+                    const SizedBox(height: 2),
+                    Text(
+                      profile.email,
+                      style: tt.bodySmall,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
+          if (profile.studiengang != null || profile.lernstil != null) ...[
             const SizedBox(height: 16),
-            const SizedBox(height: 8),
+            const Divider(),
+            const SizedBox(height: 12),
+          ],
+          if (profile.studiengang != null)
             _InfoRow(
               icon: Icons.school_outlined,
-              label: profile.studiengang ?? 'Studiengang nicht angegeben',
-              muted: profile.studiengang == null,
+              label: profile.studiengang!,
             ),
+          if (profile.lernstil != null) ...[
             const SizedBox(height: 8),
             _InfoRow(
               icon: Icons.psychology_outlined,
-              label: profile.lernstil != null
-                  ? (_lernstilOptions[profile.lernstil] ?? profile.lernstil!)
-                  : 'Lernstil nicht angegeben',
-              muted: profile.lernstil == null,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              profile.bio != null && profile.bio!.isNotEmpty
-                  ? profile.bio!
-                  : 'Noch keine Bio eingetragen.',
-              style: tt.bodyMedium?.copyWith(
-                color: profile.bio != null && profile.bio!.isNotEmpty
-                    ? null
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+              label: _lernstilOptions[profile.lernstil] ?? profile.lernstil!,
             ),
           ],
-        ),
+          if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              profile.bio!,
+              style: tt.bodyMedium?.copyWith(color: AppColors.muted),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -239,29 +249,27 @@ class _ProfileInfo extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
-  final bool muted;
 
-  const _InfoRow({required this.icon, required this.label, this.muted = false});
+  const _InfoRow({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.onSurfaceVariant;
     return Row(
       children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
+        Icon(icon, size: 18, color: AppColors.primary),
+        const SizedBox(width: 10),
         Expanded(
           child: Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: muted ? color : null,
-                ),
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),
       ],
     );
   }
 }
+
+// ── Edit Form ─────────────────────────────────────────────────────────────────
 
 class _EditForm extends StatelessWidget {
   final GlobalKey<FormState> formKey;
@@ -288,86 +296,97 @@ class _EditForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: aliasCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Anzeigename',
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-                validator: (v) =>
-                    v != null && v.trim().length >= 2 ? null : 'Mindestens 2 Zeichen',
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: studiengangCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Studiengang',
-                  prefixIcon: Icon(Icons.school_outlined),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: selectedLernstil,
-                decoration: const InputDecoration(
-                  labelText: 'Lernstil',
-                  prefixIcon: Icon(Icons.psychology_outlined),
-                ),
-                items: _lernstilOptions.entries
-                    .map((e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(e.value),
-                        ))
-                    .toList(),
-                onChanged: onLernstilChanged,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: bioCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Über mich (Bio)',
-                  prefixIcon: Icon(Icons.notes_outlined),
-                ),
-                maxLines: 3,
-                maxLength: 500,
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: onCancel,
-                      child: const Text('Abbrechen'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: isSaving ? null : onSave,
-                      child: isSaving
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Speichern'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x12000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
           ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Form(
+        key: formKey,
+        child: Column(
+          children: [
+            TextFormField(
+              controller: aliasCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Anzeigename',
+                prefixIcon: Icon(Icons.badge_outlined),
+              ),
+              validator: (v) =>
+                  v != null && v.trim().length >= 2 ? null : 'Mindestens 2 Zeichen',
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: studiengangCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Studiengang',
+                prefixIcon: Icon(Icons.school_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: selectedLernstil,
+              decoration: const InputDecoration(
+                labelText: 'Lernstil',
+                prefixIcon: Icon(Icons.psychology_outlined),
+              ),
+              items: _lernstilOptions.entries
+                  .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                  .toList(),
+              onChanged: onLernstilChanged,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: bioCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Über mich (Bio)',
+                prefixIcon: Icon(Icons.notes_outlined),
+              ),
+              maxLines: 3,
+              maxLength: 500,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onCancel,
+                    child: const Text('Abbrechen'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: isSaving ? null : onSave,
+                    child: isSaving
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Speichern'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 }
+
+// ── Subjects Section ──────────────────────────────────────────────────────────
 
 class _SubjectsSection extends ConsumerWidget {
   final List<Subject> mySubjects;
@@ -377,35 +396,37 @@ class _SubjectsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final allSubjects = ref.watch(allSubjectsProvider);
+    final tt = Theme.of(context).textTheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Meine Fächer',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => _showAddSubjectDialog(context, ref, allSubjects),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Hinzufügen'),
-            ),
-          ],
+        _SectionHeader(
+          title: 'Meine Fächer',
+          action: TextButton.icon(
+            onPressed: () => _showAddSubjectDialog(context, ref, allSubjects),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Hinzufügen'),
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         if (mySubjects.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Noch keine Fächer eingetragen.',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardWhite,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Noch keine Fächer eingetragen.',
+              style: tt.bodyMedium?.copyWith(color: AppColors.muted),
             ),
           )
         else
@@ -415,7 +436,7 @@ class _SubjectsSection extends ConsumerWidget {
             children: mySubjects
                 .map((s) => Chip(
                       label: Text(s.displayName),
-                      deleteIcon: const Icon(Icons.close, size: 16),
+                      deleteIcon: const Icon(Icons.close_rounded, size: 15),
                       onDeleted: () =>
                           ref.read(profileProvider.notifier).removeSubject(s.id),
                     ))
@@ -495,6 +516,8 @@ class _SubjectPickerDialog extends StatelessWidget {
   }
 }
 
+// ── Availability Section ──────────────────────────────────────────────────────
+
 class _AvailabilitySection extends ConsumerWidget {
   final List<UserAvailability> availabilities;
 
@@ -502,49 +525,88 @@ class _AvailabilitySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tt = Theme.of(context).textTheme;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Verfügbarkeit',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => _showAddDialog(context, ref),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Hinzufügen'),
-            ),
-          ],
+        _SectionHeader(
+          title: 'Meine Verfügbarkeit',
+          action: TextButton.icon(
+            onPressed: () => _showAddDialog(context, ref),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Hinzufügen'),
+          ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         if (availabilities.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Noch keine Zeitfenster eingetragen.',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.cardWhite,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Noch keine Zeitfenster eingetragen.',
+              style: tt.bodyMedium?.copyWith(color: AppColors.muted),
             ),
           )
         else
           ...availabilities.map(
-            (a) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: const Icon(Icons.schedule_outlined),
-                title: Text(_wochentageLabels[a.wochentag] ?? a.wochentag),
-                subtitle: Text(a.timeRange),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => ref
-                      .read(profileProvider.notifier)
-                      .removeAvailability(a.id),
+            (a) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.cardWhite,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x0A000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.schedule_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    _wochentageLabels[a.wochentag] ?? a.wochentag,
+                    style: tt.titleSmall,
+                  ),
+                  subtitle: Text(
+                    a.timeRange,
+                    style: tt.bodySmall,
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: AppColors.muted,
+                    ),
+                    onPressed: () => ref
+                        .read(profileProvider.notifier)
+                        .removeAvailability(a.id),
+                  ),
                 ),
               ),
             ),
@@ -573,6 +635,32 @@ class _AvailabilitySection extends ConsumerWidget {
     );
   }
 }
+
+// ── Section Header ────────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final Widget? action;
+
+  const _SectionHeader({required this.title, this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        if (action != null) action!,
+      ],
+    );
+  }
+}
+
+// ── Availability Dialog ───────────────────────────────────────────────────────
 
 class _AvailabilityDialog extends StatefulWidget {
   final String initialWochentag;
@@ -615,7 +703,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<String>(
-            value: _wochentag,
+            initialValue: _wochentag,
             decoration: const InputDecoration(labelText: 'Wochentag'),
             items: _wochentage
                 .map((d) => DropdownMenuItem(

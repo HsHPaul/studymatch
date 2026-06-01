@@ -1,57 +1,89 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/app_colors.dart';
+import '../../shared/models/match.dart';
 import '../../shared/models/room.dart';
 import '../../shared/models/study_session.dart';
 import '../../shared/widgets/loading_indicator.dart';
+import '../matching/matching_provider.dart';
 import 'sessions_provider.dart';
 
-class SessionsScreen extends ConsumerWidget {
+class SessionsScreen extends ConsumerStatefulWidget {
   const SessionsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SessionsScreen> createState() => _SessionsScreenState();
+}
+
+class _SessionsScreenState extends ConsumerState<SessionsScreen> {
+  DateTime _selectedDay = DateTime.now();
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(sessionsProvider);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Meine Termine'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: () => ref.read(sessionsProvider.notifier).load(),
           ),
         ],
       ),
-      body: state.isLoading
-          ? const LoadingIndicator(message: 'Termine laden…')
-          : state.error != null && state.sessions.isEmpty
-              ? ErrorView(
-                  message: state.error!,
-                  onRetry: () => ref.read(sessionsProvider.notifier).load(),
-                )
-              : RefreshIndicator(
-                  onRefresh: () => ref.read(sessionsProvider.notifier).load(),
-                  child: state.sessions.isEmpty
-                      ? _EmptyState()
-                      : _SessionList(sessions: state.sessions),
-                ),
+      body: Column(
+        children: [
+          // ── Mini Calendar ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: _MiniCalendar(
+              selectedDay: _selectedDay,
+              onDaySelected: (d) => setState(() => _selectedDay = d),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Session List ───────────────────────────────────────────────
+          Expanded(
+            child: state.isLoading
+                ? const LoadingIndicator(message: 'Termine laden…')
+                : state.error != null && state.sessions.isEmpty
+                    ? ErrorView(
+                        message: state.error!,
+                        onRetry: () =>
+                            ref.read(sessionsProvider.notifier).load(),
+                      )
+                    : RefreshIndicator(
+                        color: AppColors.primary,
+                        onRefresh: () =>
+                            ref.read(sessionsProvider.notifier).load(),
+                        child: state.sessions.isEmpty
+                            ? _EmptyState()
+                            : _SessionList(sessions: state.sessions),
+                      ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateDialog(context, ref),
-        icon: const Icon(Icons.add),
+        icon: const Icon(Icons.add_rounded),
         label: const Text('Neuer Termin'),
       ),
     );
   }
 
   void _showCreateDialog(BuildContext context, WidgetRef ref) {
+    final matchesState = ref.read(matchesProvider);
+    final matches = matchesState.asData?.value ?? [];
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => _CreateSessionSheet(
+        matches: matches,
         onSave: ({
           required String matchId,
           required DateTime datum,
@@ -75,32 +107,232 @@ class SessionsScreen extends ConsumerWidget {
   }
 }
 
+// ── Mini Calendar ─────────────────────────────────────────────────────────────
+
+class _MiniCalendar extends StatelessWidget {
+  final DateTime selectedDay;
+  final ValueChanged<DateTime> onDaySelected;
+
+  const _MiniCalendar({
+    required this.selectedDay,
+    required this.onDaySelected,
+  });
+
+  static const _dayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  static const _monthNames = [
+    '',
+    'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+  ];
+
+  int _daysInMonth(int year, int month) =>
+      DateTime(year, month + 1, 0).day;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final year = selectedDay.year;
+    final month = selectedDay.month;
+    final firstWeekday = DateTime(year, month, 1).weekday; // 1=Mo … 7=So
+    final totalDays = _daysInMonth(year, month);
+    final offset = firstWeekday - 1;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardWhite,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x10000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Text(
+                '${_monthNames[month]} $year',
+                style: tt.titleMedium,
+              ),
+              const Spacer(),
+              _NavButton(
+                icon: Icons.chevron_left_rounded,
+                onTap: () {
+                  final prev = DateTime(year, month - 1, 1);
+                  onDaySelected(DateTime(prev.year, prev.month, 1));
+                },
+              ),
+              const SizedBox(width: 4),
+              _NavButton(
+                icon: Icons.chevron_right_rounded,
+                onTap: () {
+                  final next = DateTime(year, month + 1, 1);
+                  onDaySelected(DateTime(next.year, next.month, 1));
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Day headers
+          Row(
+            children: _dayLabels.map((d) {
+              return Expanded(
+                child: Text(
+                  d,
+                  textAlign: TextAlign.center,
+                  style: tt.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+
+          // Day grid
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 7,
+              mainAxisExtent: 36,
+            ),
+            itemCount: offset + totalDays,
+            itemBuilder: (context, i) {
+              if (i < offset) return const SizedBox.shrink();
+              final day = i - offset + 1;
+              final date = DateTime(year, month, day);
+              final isToday = date.year == today.year &&
+                  date.month == today.month &&
+                  date.day == today.day;
+              final isSelected = date.year == selectedDay.year &&
+                  date.month == selectedDay.month &&
+                  date.day == selectedDay.day;
+
+              return GestureDetector(
+                onTap: () => onDaySelected(date),
+                child: Container(
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primary
+                        : isToday
+                            ? AppColors.primaryLight
+                            : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$day',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: isSelected || isToday
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      color: isSelected
+                          ? Colors.white
+                          : isToday
+                              ? AppColors.primary
+                              : AppColors.navy,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // Selected date label
+          if (selectedDay.day != DateTime.now().day ||
+              selectedDay.month != DateTime.now().month ||
+              selectedDay.year != DateTime.now().year) ...[
+            const SizedBox(height: 8),
+            Text(
+              _formatDate(selectedDay),
+              style: tt.bodySmall?.copyWith(color: AppColors.primary),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(DateTime d) {
+    const weekdays = [
+      '', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag',
+      'Samstag', 'Sonntag',
+    ];
+    return '${weekdays[d.weekday]}, ${d.day}. ${_monthNames[d.month]} ${d.year}';
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _NavButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Icon(icon, size: 20, color: AppColors.primary),
+      ),
+    );
+  }
+}
+
+// ── Empty State ───────────────────────────────────────────────────────────────
+
 class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
     return ListView(
+      padding: const EdgeInsets.all(32),
       children: [
-        const SizedBox(height: 80),
+        const SizedBox(height: 40),
         Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.calendar_today_outlined,
-                size: 72,
-                color: Theme.of(context).colorScheme.outline,
+              const SizedBox(
+                width: 88,
+                height: 88,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.calendar_today_outlined,
+                      size: 40,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Noch keine Termine',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              const SizedBox(height: 20),
+              Text('Noch keine Termine', style: tt.titleMedium),
               const SizedBox(height: 8),
               Text(
                 'Erstelle einen neuen Lerntermin\nmit einem deiner Matches.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+                style: tt.bodySmall,
               ),
             ],
           ),
@@ -109,6 +341,8 @@ class _EmptyState extends StatelessWidget {
     );
   }
 }
+
+// ── Session List ──────────────────────────────────────────────────────────────
 
 class _SessionList extends StatelessWidget {
   final List<StudySession> sessions;
@@ -121,7 +355,7 @@ class _SessionList extends StatelessWidget {
     final past = sessions.where((s) => !s.isUpcoming).toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       children: [
         if (upcoming.isNotEmpty) ...[
           const _GroupHeader(title: 'Bevorstehend'),
@@ -148,10 +382,7 @@ class _GroupHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
-          ),
+      style: Theme.of(context).textTheme.titleSmall,
     );
   }
 }
@@ -164,48 +395,66 @@ class _SessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final dt = session.dateTime;
+    final tt = Theme.of(context).textTheme;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      color: isPast ? cs.surfaceContainerHighest : null,
-      child: ListTile(
-        leading: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              dt.day.toString(),
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: isPast ? cs.outline : cs.primary,
-              ),
-            ),
-            Text(
-              _monthAbbr(dt.month),
-              style: TextStyle(
-                fontSize: 12,
-                color: isPast ? cs.outline : cs.primary,
-              ),
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isPast
+              ? const Color(0xFFF5F3FF)
+              : AppColors.cardWhite,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: isPast
+              ? null
+              : const [
+                  BoxShadow(
+                    color: Color(0x0A000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 2),
+                  ),
+                ],
         ),
-        title: Text(
-          '${_weekday(dt.weekday)}, ${_fmt2(dt.hour)}:${_fmt2(dt.minute)} Uhr',
-          style: TextStyle(
-            fontWeight: FontWeight.w500,
-            color: isPast ? cs.onSurfaceVariant : null,
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          leading: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                dt.day.toString(),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: isPast ? AppColors.muted : AppColors.primary,
+                ),
+              ),
+              Text(
+                _monthAbbr(dt.month),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isPast ? AppColors.muted : AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          title: Text(
+            '${_weekday(dt.weekday)}, ${_fmt2(dt.hour)}:${_fmt2(dt.minute)} Uhr',
+            style: tt.titleSmall?.copyWith(
+              color: isPast ? AppColors.muted : AppColors.navy,
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _StatusChip(status: session.status),
+          ),
+          trailing: Icon(
+            Icons.chevron_right_rounded,
+            color: isPast ? AppColors.muted : AppColors.navy,
           ),
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _StatusChip(status: session.status),
-          ],
-        ),
-        trailing:
-            Icon(Icons.chevron_right, color: isPast ? cs.outline : cs.onSurface),
       ),
     );
   }
@@ -234,21 +483,30 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (status) {
-      'bestaetigt' => ('Bestätigt', Colors.green),
-      'abgesagt' => ('Abgesagt', Colors.red),
-      _ => ('Geplant', Theme.of(context).colorScheme.primary),
+      'bestaetigt' => ('Bestätigt', AppColors.success),
+      'abgesagt' => ('Abgesagt', AppColors.error),
+      _ => ('Geplant', AppColors.primary),
     };
 
-    return Chip(
-      label: Text(label, style: const TextStyle(fontSize: 11)),
-      backgroundColor: color.withOpacity(0.12),
-      side: BorderSide.none,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
     );
   }
 }
+
+// ── Create Session Sheet ──────────────────────────────────────────────────────
 
 typedef _CreateCallback = Future<void> Function({
   required String matchId,
@@ -258,9 +516,13 @@ typedef _CreateCallback = Future<void> Function({
 });
 
 class _CreateSessionSheet extends ConsumerStatefulWidget {
+  final List<Match> matches;
   final _CreateCallback onSave;
 
-  const _CreateSessionSheet({required this.onSave});
+  const _CreateSessionSheet({
+    required this.matches,
+    required this.onSave,
+  });
 
   @override
   ConsumerState<_CreateSessionSheet> createState() =>
@@ -268,17 +530,11 @@ class _CreateSessionSheet extends ConsumerStatefulWidget {
 }
 
 class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
-  final _matchIdController = TextEditingController();
+  Match? _selectedMatch;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   TimeOfDay _selectedTime = const TimeOfDay(hour: 10, minute: 0);
   Room? _selectedRoom;
   bool _saving = false;
-
-  @override
-  void dispose() {
-    _matchIdController.dispose();
-    super.dispose();
-  }
 
   String _fmtDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
@@ -287,16 +543,15 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Future<void> _save() async {
-    final matchId = _matchIdController.text.trim();
-    if (matchId.isEmpty) {
+    if (_selectedMatch == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Match-ID ist erforderlich')),
+        const SnackBar(content: Text('Bitte wähle einen Lernpartner aus')),
       );
       return;
     }
     setState(() => _saving = true);
     await widget.onSave(
-      matchId: matchId,
+      matchId: _selectedMatch!.matchId,
       datum: _selectedDate,
       uhrzeit: _selectedTime,
       raumId: _selectedRoom?.id,
@@ -310,11 +565,12 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
   @override
   Widget build(BuildContext context) {
     final rooms = ref.watch(roomsProvider);
+    final tt = Theme.of(context).textTheme;
 
     return Padding(
       padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
+        left: 20,
+        right: 20,
         top: 24,
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
       ),
@@ -322,35 +578,80 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD0CDED),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Row(
             children: [
-              const Expanded(
-                child: Text(
-                  'Neuer Lerntermin',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+              Expanded(
+                child: Text('Neuer Lerntermin', style: tt.headlineSmall),
               ),
               IconButton(
-                icon: const Icon(Icons.close),
+                icon: const Icon(Icons.close_rounded),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _matchIdController,
-            decoration: const InputDecoration(
-              labelText: 'Match-ID (UUID)',
-              helperText: 'Die UUID des Match-Datensatzes aus der Datenbank',
-              prefixIcon: Icon(Icons.people_outlined),
+          const SizedBox(height: 20),
+
+          // ── Match Picker ───────────────────────────────────────────────
+          if (widget.matches.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded,
+                      size: 18, color: AppColors.primary),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Keine Matches gefunden. Vervollständige zuerst dein Profil.',
+                      style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            DropdownButtonFormField<Match>(
+              decoration: const InputDecoration(
+                labelText: 'Lernpartner',
+                prefixIcon: Icon(Icons.people_outlined),
+              ),
+              hint: const Text('Partner auswählen'),
+              items: widget.matches
+                  .map((m) => DropdownMenuItem(
+                        value: m,
+                        child: Text(m.alias),
+                      ))
+                  .toList(),
+              onChanged: (m) => setState(() => _selectedMatch = m),
             ),
-          ),
+
           const SizedBox(height: 12),
+
+          // ── Datum & Uhrzeit ────────────────────────────────────────────
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  icon: const Icon(Icons.calendar_today, size: 18),
+                  icon: const Icon(Icons.calendar_today_rounded, size: 18),
                   label: Text(_fmtDate(_selectedDate)),
                   onPressed: () async {
                     final d = await showDatePicker(
@@ -366,7 +667,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
-                  icon: const Icon(Icons.access_time, size: 18),
+                  icon: const Icon(Icons.access_time_rounded, size: 18),
                   label: Text(_fmtTime(_selectedTime)),
                   onPressed: () async {
                     final t = await showTimePicker(
@@ -380,20 +681,20 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
             ],
           ),
           const SizedBox(height: 12),
+
+          // ── Raum ───────────────────────────────────────────────────────
           rooms.when(
-            loading: () => const LinearProgressIndicator(),
+            loading: () => const LinearProgressIndicator(
+              color: AppColors.primary,
+            ),
             error: (_, __) => const SizedBox.shrink(),
             data: (roomList) => DropdownButtonFormField<Room>(
-              value: _selectedRoom,
               decoration: const InputDecoration(
                 labelText: 'Raum (optional)',
                 prefixIcon: Icon(Icons.room_outlined),
               ),
               items: [
-                const DropdownMenuItem(
-                  value: null,
-                  child: Text('Kein Raum'),
-                ),
+                const DropdownMenuItem(value: null, child: Text('Kein Raum')),
                 ...roomList.map((r) => DropdownMenuItem(
                       value: r,
                       child: Text(r.displayName),
@@ -402,14 +703,18 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
               onChanged: (r) => setState(() => _selectedRoom = r),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
+
           FilledButton(
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || widget.matches.isEmpty ? null : _save,
             child: _saving
                 ? const SizedBox(
                     height: 20,
                     width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Text('Termin erstellen'),
           ),

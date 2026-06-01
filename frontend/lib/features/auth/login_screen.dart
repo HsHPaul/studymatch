@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/app_colors.dart';
+import '../../shared/widgets/study_match_logo.dart';
 import 'auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -16,6 +18,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = true;
 
   @override
   void dispose() {
@@ -35,108 +38,249 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const SizedBox(height: 44),
-                  Image.asset('assets/hsh_logo.png', height: 120),
-                  const SizedBox(height: 16),
-                  Text(
-                    'StudyMatch',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: cs.primary,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Finde deinen Lernpartner',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                  ),
-                  const SizedBox(height: 40),
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      children: [
-                        TextFormField(
-                          controller: _emailController,
-                          decoration: const InputDecoration(
-                            labelText: 'E-Mail',
-                            prefixIcon: Icon(Icons.email_outlined),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 36),
+
+                // ── Logo ────────────────────────────────────────────────
+                const Center(child: StudyMatchLogo(size: 52)),
+
+                const SizedBox(height: 44),
+
+                // ── Hero Row ─────────────────────────────────────────────
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Lernen verbindet.',
+                            style: tt.headlineMedium,
                           ),
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          autocorrect: false,
-                          validator: (v) => v != null && v.contains('@')
-                              ? null
-                              : 'Gültige E-Mail eingeben',
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _passwordController,
-                          decoration: InputDecoration(
-                            labelText: 'Passwort',
-                            prefixIcon: const Icon(Icons.lock_outlined),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                              ),
-                              onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword),
+                          Text(
+                            'Erfolg entsteht.',
+                            style: tt.headlineMedium?.copyWith(
+                              color: AppColors.primary,
                             ),
                           ),
-                          obscureText: _obscurePassword,
-                          textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) => _submit(),
-                          validator: (v) =>
-                              v != null && v.isNotEmpty ? null : 'Passwort eingeben',
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (auth.error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        auth.error!,
-                        style: TextStyle(color: cs.error),
-                        textAlign: TextAlign.center,
+                          const SizedBox(height: 8),
+                          Text(
+                            'Finde deinen Lernpartner.',
+                            style: tt.bodyLarge?.copyWith(
+                              color: AppColors.muted,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  const SizedBox(height: 24),
-                  FilledButton(
-                    onPressed: auth.isLoading ? null : _submit,
-                    child: auth.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Anmelden'),
+                    const SizedBox(width: 16),
+                    Container(
+                      width: 128,
+                      height: 128,
+                      decoration: BoxDecoration(
+                        color: AppColors.cardWhite,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14000000),
+                            blurRadius: 16,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Image.asset(
+                        'assets/login_illustration.png',
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 36),
+
+                // ── Login Card ───────────────────────────────────────────
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.cardWhite,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x14000000),
+                        blurRadius: 20,
+                        offset: Offset(0, 6),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () => context.go('/register'),
-                    child: const Text('Noch kein Konto? Jetzt registrieren'),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Willkommen zurück 👋', style: tt.headlineSmall),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Logge dich ein und setze deine Lernreise fort.',
+                        style: tt.bodySmall,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ── Form ──────────────────────────────────────────
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            TextFormField(
+                              controller: _emailController,
+                              decoration: const InputDecoration(
+                                labelText: 'E-Mail',
+                                prefixIcon: Icon(Icons.email_outlined),
+                              ),
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              autocorrect: false,
+                              validator: (v) => v != null && v.contains('@')
+                                  ? null
+                                  : 'Gültige E-Mail eingeben',
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _passwordController,
+                              decoration: InputDecoration(
+                                labelText: 'Passwort',
+                                prefixIcon: const Icon(Icons.lock_outlined),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscurePassword
+                                        ? Icons.visibility_outlined
+                                        : Icons.visibility_off_outlined,
+                                  ),
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
+                                ),
+                              ),
+                              obscureText: _obscurePassword,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _submit(),
+                              validator: (v) => v != null && v.isNotEmpty
+                                  ? null
+                                  : 'Passwort eingeben',
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // ── Remember me + Forgot password ─────────────────
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Checkbox(
+                              value: _rememberMe,
+                              onChanged: (v) =>
+                                  setState(() => _rememberMe = v ?? true),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () =>
+                                setState(() => _rememberMe = !_rememberMe),
+                            child: Text(
+                              'Angemeldet bleiben',
+                              style: tt.bodySmall?.copyWith(
+                                color: AppColors.navy,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () {},
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 0),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
+                            child: const Text('Passwort vergessen?'),
+                          ),
+                        ],
+                      ),
+
+                      // ── Error ─────────────────────────────────────────
+                      if (auth.error != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          auth.error!,
+                          style: const TextStyle(
+                              color: AppColors.error, fontSize: 13),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+
+                      const SizedBox(height: 20),
+
+                      // ── Login Button ──────────────────────────────────
+                      FilledButton(
+                        onPressed: auth.isLoading ? null : _submit,
+                        child: auth.isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Anmelden'),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // ── Register Link ─────────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Noch kein Konto?',
+                            style: tt.bodySmall,
+                          ),
+                          TextButton(
+                            onPressed: () => context.go('/register'),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.only(left: 4),
+                              textStyle: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            child: const Text('Jetzt Registrieren'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 24),
-                ],
-              ),
+                ),
+
+                const SizedBox(height: 40),
+              ],
             ),
           ),
         ),

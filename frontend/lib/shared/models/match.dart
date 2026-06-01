@@ -21,6 +21,7 @@ class AvailabilityOverlap {
 }
 
 class Match {
+  final String matchId;
   final String userId;
   final String alias;
   final String? studiengang;
@@ -30,6 +31,7 @@ class Match {
   final double score;
 
   const Match({
+    required this.matchId,
     required this.userId,
     required this.alias,
     this.studiengang,
@@ -40,6 +42,7 @@ class Match {
   });
 
   factory Match.fromJson(Map<String, dynamic> json) => Match(
+        matchId: json['match_id'] as String,
         userId: json['user_id'] as String,
         alias: json['alias'] as String,
         studiengang: json['studiengang'] as String?,

@@ -9,7 +9,10 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../core/api_client.dart';
 import '../../shared/models/message.dart';
 
-const _wsBaseUrl = 'ws://localhost:8000/api/v1';
+const _wsBaseUrl = String.fromEnvironment(
+  'WS_BASE_URL',
+  defaultValue: 'ws://localhost:8000/api/v1',
+);
 
 class ChatState {
   final List<Message> messages;

@@ -8,6 +8,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
 from app.api import auth, profiles, matching, chat, sessions, rooms
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.limiter import limiter
 
@@ -17,6 +18,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
+    # Produktions-Origins kommen aus der ENV (CORS_ORIGINS), lokale Entwicklung
+    # bleibt über den localhost-Regex immer erlaubt.
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_origin_regex=r"http://localhost(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],

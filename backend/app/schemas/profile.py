@@ -48,6 +48,7 @@ class ProfileUpdate(BaseModel):
     studiengang: str | None = None
     lernstil: Lernstil | None = None
     bio: str | None = Field(default=None, max_length=500)
+    min_match_score: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class ProfileResponse(OrmBase):
@@ -57,3 +58,4 @@ class ProfileResponse(OrmBase):
     studiengang: str | None
     lernstil: Lernstil | None
     bio: str | None
+    min_match_score: float = 0.0

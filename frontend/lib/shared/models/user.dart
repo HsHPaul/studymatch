@@ -5,6 +5,7 @@ class UserProfile {
   final String? studiengang;
   final String? lernstil;
   final String? bio;
+  final double minMatchScore;
 
   const UserProfile({
     required this.id,
@@ -13,6 +14,7 @@ class UserProfile {
     this.studiengang,
     this.lernstil,
     this.bio,
+    this.minMatchScore = 0.0,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
@@ -22,23 +24,8 @@ class UserProfile {
         studiengang: json['studiengang'] as String?,
         lernstil: json['lernstil'] as String?,
         bio: json['bio'] as String?,
+        minMatchScore: (json['min_match_score'] as num?)?.toDouble() ?? 0.0,
       );
 
-  UserProfile copyWith({
-    String? alias,
-    String? studiengang,
-    String? lernstil,
-    String? bio,
-    bool clearLernstil = false,
-    bool clearStudiengang = false,
-    bool clearBio = false,
-  }) =>
-      UserProfile(
-        id: id,
-        alias: alias ?? this.alias,
-        email: email,
-        studiengang: clearStudiengang ? null : (studiengang ?? this.studiengang),
-        lernstil: clearLernstil ? null : (lernstil ?? this.lernstil),
-        bio: clearBio ? null : (bio ?? this.bio),
-      );
+  int get minMatchPercent => (minMatchScore * 100).round();
 }

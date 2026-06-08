@@ -197,6 +197,26 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     }
   }
 
+  Future<bool> updateMinMatchScore(double score) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      final res = await _dio.patch('/profiles/me', data: {'min_match_score': score});
+      if (!mounted) return false;
+      state = state.copyWith(
+        profile: UserProfile.fromJson(res.data as Map<String, dynamic>),
+        isSaving: false,
+      );
+      return true;
+    } on DioException catch (e) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        isSaving: false,
+        error: e.response?.data?['detail']?.toString() ?? 'Speichern fehlgeschlagen',
+      );
+      return false;
+    }
+  }
+
   Future<bool> changePassword({
     required String currentPassword,
     required String newPassword,

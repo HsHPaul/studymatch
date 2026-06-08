@@ -25,6 +25,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    // Beim Öffnen des Chats immer aktuelle Terminanfragen laden
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.invalidate(pendingSessionsProvider(widget.matchId));
+    });
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
@@ -127,6 +136,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     raumId: selectedRoom?.id,
                   );
                   if (context.mounted) {
+                    ref.invalidate(pendingSessionsProvider(matchId));
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(ok ? 'Terminanfrage gesendet!' : 'Fehler beim Senden')),
                     );
@@ -170,6 +180,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       appBar: AppBar(
         title: Text(partnerAlias),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Aktualisieren',
+            onPressed: () => ref.invalidate(pendingSessionsProvider(widget.matchId)),
+          ),
           IconButton(
             icon: const Icon(Icons.calendar_today_rounded),
             tooltip: 'Termin vorschlagen',

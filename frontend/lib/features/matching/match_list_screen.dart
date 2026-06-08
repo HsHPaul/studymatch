@@ -6,16 +6,36 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/app_colors.dart';
 import '../../features/auth/auth_provider.dart';
+import '../../features/matching/matching_provider.dart';
 import '../../features/profile/profile_provider.dart';
 import '../../shared/models/match.dart';
 import '../../shared/widgets/loading_indicator.dart';
-import 'matching_provider.dart';
 
-class MatchListScreen extends ConsumerWidget {
+class MatchListScreen extends ConsumerStatefulWidget {
   const MatchListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MatchListScreen> createState() => _MatchListScreenState();
+}
+
+class _MatchListScreenState extends ConsumerState<MatchListScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     ref.listen<AuthState>(authProvider, (prev, next) {
       if (next.isAuthenticated && !(prev?.isAuthenticated ?? false)) {
         ref.read(matchesProvider.notifier).load();
@@ -50,70 +70,66 @@ class MatchListScreen extends ConsumerWidget {
         final incoming = matches.where((m) => m.isPending && !m.iRequested).toList();
         final suggestions = matches.where((m) => m.isSuggestion || (m.isPending && m.iRequested)).toList();
 
-        return DefaultTabController(
-          length: 3,
-          child: Scaffold(
-            backgroundColor: AppColors.background,
-            appBar: AppBar(
-              title: const Text('Matches'),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded),
-                  onPressed: () => ref.read(matchesProvider.notifier).load(),
-                  tooltip: 'Aktualisieren',
-                ),
-              ],
-              bottom: TabBar(
-                tabs: [
-                  const Tab(text: 'Bestätigt'),
-                  Tab(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Anfragen'),
-                        if (incoming.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: AppColors.error,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '${incoming.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: const Text('Matches'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: () => ref.read(matchesProvider.notifier).load(),
+                tooltip: 'Aktualisieren',
+              ),
+            ],
+            bottom: TabBar(
+              controller: _tabController,
+              tabs: [
+                const Tab(text: 'Bestätigt'),
+                Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Anfragen'),
+                      if (incoming.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.error,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '${incoming.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        ],
+                        ),
                       ],
-                    ),
+                    ],
                   ),
-                  const Tab(text: 'Vorschläge'),
-                ],
-              ),
-            ),
-            body: TabBarView(
-              children: [
-                _MatchTab(
-                  matches: accepted,
-                  emptyIcon: Icons.handshake_outlined,
-                  emptyTitle: 'Noch keine bestätigten Matches',
-                  emptySubtitle: 'Schicke Anfragen an passende Lernpartner\naus dem Vorschläge-Tab.',
                 ),
-                _IncomingTab(matches: incoming),
-                _MatchTab(
-                  matches: suggestions,
-                  emptyIcon: Icons.search_rounded,
-                  emptyTitle: 'Keine Vorschläge gefunden',
-                  emptySubtitle: 'Trage Fächer und Verfügbarkeiten in dein Profil ein.',
-                  showLernstilHint: ref.watch(profileProvider).profile?.lernstil == null,
-                ),
+                const Tab(text: 'Vorschläge'),
               ],
             ),
+          ),
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              _MatchTab(
+                matches: accepted,
+                emptyIcon: Icons.handshake_outlined,
+                emptyTitle: 'Noch keine bestätigten Matches',
+                emptySubtitle: 'Schicke Anfragen an passende Lernpartner\naus dem Vorschläge-Tab.',
+              ),
+              _IncomingTab(matches: incoming),
+              _SuggestionsTab(
+                matches: suggestions,
+                showLernstilHint: ref.watch(profileProvider).profile?.lernstil == null,
+              ),
+            ],
           ),
         );
       },
@@ -128,14 +144,12 @@ class _MatchTab extends ConsumerWidget {
   final IconData emptyIcon;
   final String emptyTitle;
   final String emptySubtitle;
-  final bool showLernstilHint;
 
   const _MatchTab({
     required this.matches,
     required this.emptyIcon,
     required this.emptyTitle,
     required this.emptySubtitle,
-    this.showLernstilHint = false,
   });
 
   @override
@@ -145,7 +159,6 @@ class _MatchTab extends ConsumerWidget {
         icon: emptyIcon,
         title: emptyTitle,
         subtitle: emptySubtitle,
-        showLernstilHint: showLernstilHint,
       );
     }
     return RefreshIndicator(
@@ -156,6 +169,179 @@ class _MatchTab extends ConsumerWidget {
         itemCount: matches.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, i) => _MatchCard(match: matches[i]),
+      ),
+    );
+  }
+}
+
+// ── Suggestions Tab (with filter) ────────────────────────────────────────────
+
+class _SuggestionsTab extends ConsumerStatefulWidget {
+  final List<Match> matches;
+  final bool showLernstilHint;
+
+  const _SuggestionsTab({required this.matches, required this.showLernstilHint});
+
+  @override
+  ConsumerState<_SuggestionsTab> createState() => _SuggestionsTabState();
+}
+
+class _SuggestionsTabState extends ConsumerState<_SuggestionsTab> {
+  bool _showFilter = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = ref.watch(profileProvider).profile;
+    final currentMin = profile?.minMatchPercent ?? 0;
+    final isSaving = ref.watch(profileProvider).isSaving;
+
+    return Column(
+      children: [
+        // Filter-Leiste
+        Container(
+          color: AppColors.cardWhite,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(
+                currentMin == 0 ? 'Alle anzeigen' : 'Ab $currentMin% Match',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                onPressed: () => setState(() => _showFilter = !_showFilter),
+                child: Text(_showFilter ? 'Schließen' : 'Anpassen'),
+              ),
+            ],
+          ),
+        ),
+        if (_showFilter)
+          _FilterPanel(
+            currentMin: currentMin,
+            isSaving: isSaving,
+            onChanged: (val) async {
+              final ok = await ref
+                  .read(profileProvider.notifier)
+                  .updateMinMatchScore(val / 100.0);
+              if (ok) {
+                ref.read(matchesProvider.notifier).load();
+                if (mounted) setState(() => _showFilter = false);
+              }
+            },
+          ),
+        Expanded(
+          child: widget.matches.isEmpty
+              ? _EmptyState(
+                  icon: Icons.search_rounded,
+                  title: currentMin > 0
+                      ? 'Keine Vorschläge ab $currentMin%'
+                      : 'Keine Vorschläge gefunden',
+                  subtitle: currentMin > 0
+                      ? 'Senke den Mindest-Prozentwert oder ergänze dein Profil.'
+                      : 'Trage Fächer und Verfügbarkeiten in dein Profil ein.',
+                  showLernstilHint: widget.showLernstilHint,
+                )
+              : RefreshIndicator(
+                  color: AppColors.primary,
+                  onRefresh: () => ref.read(matchesProvider.notifier).load(),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    itemCount: widget.matches.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, i) =>
+                        _MatchCard(match: widget.matches[i]),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FilterPanel extends StatefulWidget {
+  final int currentMin;
+  final bool isSaving;
+  final ValueChanged<int> onChanged;
+
+  const _FilterPanel({
+    required this.currentMin,
+    required this.isSaving,
+    required this.onChanged,
+  });
+
+  @override
+  State<_FilterPanel> createState() => _FilterPanelState();
+}
+
+class _FilterPanelState extends State<_FilterPanel> {
+  late double _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.currentMin.toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      color: AppColors.primaryLight,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Mindest-Match: ${_value.round()}%',
+            style: tt.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Nur Personen ab diesem Wert werden angezeigt – und umgekehrt.',
+            style: tt.bodySmall?.copyWith(color: AppColors.muted),
+          ),
+          Slider(
+            value: _value,
+            min: 0,
+            max: 90,
+            divisions: 9,
+            label: '${_value.round()}%',
+            activeColor: AppColors.primary,
+            onChanged: (v) => setState(() => _value = v),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('0% (alle)', style: tt.bodySmall),
+              Text('90%', style: tt.bodySmall),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: widget.isSaving
+                  ? null
+                  : () => widget.onChanged(_value.round()),
+              child: widget.isSaving
+                  ? const SizedBox(
+                      height: 18, width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Speichern'),
+            ),
+          ),
+        ],
       ),
     );
   }

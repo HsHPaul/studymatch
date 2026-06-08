@@ -87,6 +87,15 @@ def find_matches(current_user: User, db: Session) -> list[MatchResponse]:
             continue
 
         score = _calculate_score(current_user, candidate, gemeinsame, overlaps)
+
+        # Beide Nutzer müssen die Mindest-Score-Anforderung erfüllen
+        min_required = max(
+            getattr(current_user, 'min_match_score', 0.0) or 0.0,
+            getattr(candidate, 'min_match_score', 0.0) or 0.0,
+        )
+        if score < min_required:
+            continue
+
         gemeinsame_names = [
             us.subject.name for us in candidate.subjects if us.subject_id in gemeinsame
         ]

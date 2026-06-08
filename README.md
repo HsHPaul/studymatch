@@ -67,6 +67,11 @@ frontend/lib/
 Regelbasiert (kein ML). Pflicht: mind. 1 gemeinsames Fach + mind. 1 überlappende Verfügbarkeit.  
 Scoring: Fach 45% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
 
+### Match-Filter (Mindest-Score)
+Jeder User kann in seinem Profil einen Mindest-Match-Prozentsatz setzen (`min_match_score`, 0–90%).  
+Ein Vorschlag erscheint nur, wenn `score >= max(mein_minimum, ihr_minimum)` — beide Seiten müssen den Wert erfüllen.  
+Einstellbar über den "Anpassen"-Button im Vorschläge-Tab.
+
 ### Bekannte Fixes / wichtige Hinweise
 - **bcrypt:** `passlib` durch direktes `bcrypt` ersetzt (`security.py`) — passlib 1.7.4 ist inkompatibel mit bcrypt 4.x
 - **401-Interceptor:** Bei abgelaufenem Token leitet die App automatisch zur Loginmaske (via `sessionExpiredProvider`)
@@ -83,7 +88,7 @@ Scoring: Fach 45% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
 | POST | `/api/v1/auth/login` | Login → JWT-Token |
 | POST | `/api/v1/auth/reset-password` | Passwort zurücksetzen (ohne E-Mail-Verifizierung, MVP) |
 | GET | `/api/v1/profiles/me` | Eigenes Profil abrufen |
-| PATCH | `/api/v1/profiles/me` | Profil bearbeiten |
+| PATCH | `/api/v1/profiles/me` | Profil bearbeiten (inkl. `min_match_score`) |
 | PATCH | `/api/v1/profiles/me/password` | Passwort ändern (mit aktuellem Passwort) |
 | DELETE | `/api/v1/profiles/me` | Account vollständig löschen |
 | POST | `/api/v1/profiles/me/subjects` | Fach hinzufügen |

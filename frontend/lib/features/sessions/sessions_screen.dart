@@ -397,65 +397,88 @@ class _SessionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final dt = session.dateTime;
     final tt = Theme.of(context).textTheme;
+    final hasPending = session.hasPendingEdit && !session.iProposedEdit;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
         decoration: BoxDecoration(
-          color: isPast
-              ? const Color(0xFFF5F3FF)
-              : AppColors.cardWhite,
+          color: isPast ? const Color(0xFFF5F3FF) : AppColors.cardWhite,
           borderRadius: BorderRadius.circular(16),
+          border: hasPending
+              ? Border.all(color: AppColors.warning, width: 1.5)
+              : null,
           boxShadow: isPast
               ? null
-              : const [
-                  BoxShadow(
-                    color: Color(0x0A000000),
-                    blurRadius: 10,
-                    offset: Offset(0, 2),
+              : const [BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, 2))],
+        ),
+        child: InkWell(
+          onTap: () => _showDetailSheet(context),
+          borderRadius: BorderRadius.circular(16),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  dt.day.toString(),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
+                      color: isPast ? AppColors.muted : AppColors.primary),
+                ),
+                Text(
+                  _monthAbbr(dt.month),
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                      color: isPast ? AppColors.muted : AppColors.primary),
+                ),
+              ],
+            ),
+            title: Text(
+              session.partnerAlias,
+              style: tt.titleSmall?.copyWith(color: isPast ? AppColors.muted : AppColors.navy),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_weekday(dt.weekday)}, ${_fmt2(dt.hour)}:${_fmt2(dt.minute)} Uhr',
+                    style: tt.bodySmall?.copyWith(color: isPast ? AppColors.muted : AppColors.navy),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      _StatusChip(status: session.status),
+                      if (hasPending) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text('Änderung angefragt',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning)),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
-        ),
-        child: ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          leading: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                dt.day.toString(),
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: isPast ? AppColors.muted : AppColors.primary,
-                ),
               ),
-              Text(
-                _monthAbbr(dt.month),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isPast ? AppColors.muted : AppColors.primary,
-                ),
-              ),
-            ],
-          ),
-          title: Text(
-            '${_weekday(dt.weekday)}, ${_fmt2(dt.hour)}:${_fmt2(dt.minute)} Uhr',
-            style: tt.titleSmall?.copyWith(
-              color: isPast ? AppColors.muted : AppColors.navy,
             ),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: _StatusChip(status: session.status),
-          ),
-          trailing: Icon(
-            Icons.chevron_right_rounded,
-            color: isPast ? AppColors.muted : AppColors.navy,
+            trailing: Icon(Icons.chevron_right_rounded,
+                color: isPast ? AppColors.muted : AppColors.navy),
           ),
         ),
       ),
+    );
+  }
+
+  void _showDetailSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _SessionDetailSheet(session: session),
     );
   }
 
@@ -472,6 +495,252 @@ class _SessionCard extends StatelessWidget {
   String _weekday(int w) {
     const days = ['', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
     return days[w];
+  }
+}
+
+// ── Session Detail Sheet ──────────────────────────────────────────────────────
+
+class _SessionDetailSheet extends ConsumerStatefulWidget {
+  final StudySession session;
+  const _SessionDetailSheet({required this.session});
+
+  @override
+  ConsumerState<_SessionDetailSheet> createState() => _SessionDetailSheetState();
+}
+
+class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
+  bool _editing = false;
+  late DateTime _newDate;
+  late TimeOfDay _newTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _newDate = widget.session.dateTime;
+    _newTime = TimeOfDay(hour: widget.session.dateTime.hour, minute: widget.session.dateTime.minute);
+  }
+
+  String _fmtDate(String d) {
+    final p = d.split('-');
+    return p.length == 3 ? '${p[2]}.${p[1]}.${p[0]}' : d;
+  }
+
+  String _fmtDateDt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+
+  String _fmtTime(String t) => t.length >= 5 ? t.substring(0, 5) : t;
+
+  String _fmtTimeTod(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.session;
+    final tt = Theme.of(context).textTheme;
+    final canEdit = (s.status == 'geplant' || s.status == 'bestaetigt') && !s.hasPendingEdit;
+    final isIncomingEdit = s.hasPendingEdit && !s.iProposedEdit;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20, right: 20, top: 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: const Color(0xFFD0CDED), borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: Text('Termin mit ${s.partnerAlias}', style: tt.titleLarge)),
+              if (canEdit)
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined),
+                  tooltip: 'Änderung vorschlagen',
+                  onPressed: () => setState(() => _editing = !_editing),
+                ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Aktuelle Daten
+          _InfoRow(icon: Icons.calendar_today_rounded, label: _fmtDate(s.datum)),
+          const SizedBox(height: 8),
+          _InfoRow(icon: Icons.access_time_rounded, label: '${_fmtTime(s.uhrzeit)} Uhr'),
+          const SizedBox(height: 8),
+          _StatusChip(status: s.status),
+
+          // Eingehende Änderungsanfrage
+          if (isIncomingEdit) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.warning, width: 1),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.edit_notifications_outlined, size: 16, color: AppColors.warning),
+                      SizedBox(width: 8),
+                      Text('Änderungsanfrage',
+                          style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.warning, fontSize: 13)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Neues Datum: ${_fmtDate(s.proposedDatum!)}', style: tt.bodySmall),
+                  Text('Neue Uhrzeit: ${_fmtTime(s.proposedUhrzeit!)} Uhr', style: tt.bodySmall),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                          onPressed: () async {
+                            final ok = await ref.read(sessionsProvider.notifier).declineEdit(s.id);
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              if (!ok) { ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Fehler beim Ablehnen'))); }
+                            }
+                          },
+                          child: const Text('Ablehnen'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () async {
+                            final ok = await ref.read(sessionsProvider.notifier).acceptEdit(s.id);
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              if (ok) { ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Termin aktualisiert!'))); }
+                            }
+                          },
+                          child: const Text('Annehmen'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Ausgehende Änderungsanfrage
+          if (s.hasPendingEdit && s.iProposedEdit) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.hourglass_empty_rounded, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Änderungsanfrage gesendet – warte auf Bestätigung.',
+                      style: tt.bodySmall?.copyWith(color: AppColors.primary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Bearbeitungsformular
+          if (_editing) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text('Neue Zeit vorschlagen', style: tt.titleSmall),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                    label: Text(_fmtDateDt(_newDate)),
+                    onPressed: () async {
+                      final d = await showDatePicker(
+                        context: context, initialDate: _newDate,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (d != null) setState(() => _newDate = d);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.access_time_rounded, size: 16),
+                    label: Text(_fmtTimeTod(_newTime)),
+                    onPressed: () async {
+                      final t = await showTimePicker(context: context, initialTime: _newTime);
+                      if (t != null) setState(() => _newTime = t);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () async {
+                final ok = await ref.read(sessionsProvider.notifier).proposeEdit(
+                  sessionId: s.id,
+                  datum: _newDate,
+                  uhrzeit: _newTime,
+                );
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(ok ? 'Änderungsanfrage gesendet!' : 'Fehler beim Senden')),
+                  );
+                }
+              },
+              child: const Text('Änderung anfragen'),
+            ),
+          ],
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _InfoRow({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.primary),
+        const SizedBox(width: 8),
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+    );
   }
 }
 

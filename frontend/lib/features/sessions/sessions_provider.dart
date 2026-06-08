@@ -60,6 +60,44 @@ class SessionsNotifier extends StateNotifier<SessionsState> {
     }
   }
 
+  Future<bool> acceptSession(String sessionId) => _updateSessionStatus(sessionId, 'accept');
+  Future<bool> declineSession(String sessionId) => _updateSessionStatus(sessionId, 'decline');
+  Future<bool> acceptEdit(String sessionId) => _updateSessionStatus(sessionId, 'accept-edit');
+  Future<bool> declineEdit(String sessionId) => _updateSessionStatus(sessionId, 'decline-edit');
+
+  Future<bool> proposeEdit({
+    required String sessionId,
+    required DateTime datum,
+    required TimeOfDay uhrzeit,
+    String? raumId,
+  }) async {
+    try {
+      final dio = _ref.read(dioProvider);
+      await dio.patch('/sessions/$sessionId/propose-edit', data: {
+        'datum': _fmtDate(datum),
+        'uhrzeit': _fmtTime(uhrzeit),
+        if (raumId != null) 'raum_id': raumId,
+      });
+      if (!mounted) return false;
+      await load();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _updateSessionStatus(String sessionId, String action) async {
+    try {
+      final dio = _ref.read(dioProvider);
+      await dio.post('/sessions/$sessionId/$action');
+      if (!mounted) return false;
+      await load();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> createSession({
     required String matchId,
     required DateTime datum,
@@ -75,12 +113,9 @@ class SessionsNotifier extends StateNotifier<SessionsState> {
         'uhrzeit': _fmtTime(uhrzeit),
         if (raumId != null) 'raum_id': raumId,
       };
-      final res = await dio.post('/sessions', data: data);
-      final session =
-          StudySession.fromJson(res.data as Map<String, dynamic>);
-      final updated = [...state.sessions, session]
-        ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
-      state = state.copyWith(sessions: updated, isSaving: false);
+      await dio.post('/sessions', data: data);
+      if (!mounted) return false;
+      await load();
       return true;
     } catch (e) {
       state = state.copyWith(
@@ -102,6 +137,15 @@ final sessionsProvider =
     StateNotifierProvider<SessionsNotifier, SessionsState>(
   (ref) => SessionsNotifier(ref),
 );
+
+final pendingSessionsProvider =
+    FutureProvider.family<List<StudySession>, String>((ref, matchId) async {
+  final dio = ref.read(dioProvider);
+  final res = await dio.get('/sessions/pending/$matchId');
+  return (res.data as List)
+      .map((e) => StudySession.fromJson(e as Map<String, dynamic>))
+      .toList();
+});
 
 final roomsProvider = FutureProvider<List<Room>>((ref) async {
   final dio = ref.read(dioProvider);

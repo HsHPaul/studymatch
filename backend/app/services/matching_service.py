@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.match import Match
 from app.models.subject import UserSubject
 from app.models.availability import Availability
+from app.models.enums import MatchStatus
 from app.schemas.matching import MatchResponse, AvailabilityOverlap
 
 # Scoring-Gewichte (müssen zusammen 1.0 ergeben)
@@ -29,14 +30,47 @@ def find_matches(current_user: User, db: Session) -> list[MatchResponse]:
         )
         .all()
     )
-
+    candidate_map = {c.id: c for c in candidates}
     current_subject_ids = {us.subject_id for us in current_user.subjects}
     results = []
+    included_partner_ids: set = set()
 
+    # Phase 1: Bestätigte / angefragte Matches immer einbeziehen
+    confirmed = db.query(Match).filter(
+        (Match.user_a_id == current_user.id) | (Match.user_b_id == current_user.id),
+        Match.status.in_([MatchStatus.angefragt, MatchStatus.akzeptiert]),
+    ).all()
+
+    for db_match in confirmed:
+        partner_id = db_match.user_b_id if db_match.user_a_id == current_user.id else db_match.user_a_id
+        candidate = candidate_map.get(partner_id)
+        if not candidate:
+            continue
+        gemeinsame = current_subject_ids & {us.subject_id for us in candidate.subjects}
+        gemeinsame_names = [us.subject.name for us in candidate.subjects if us.subject_id in gemeinsame]
+        overlaps = _find_time_overlaps(current_user.availabilities, candidate.availabilities)
+        i_requested = db_match.requested_by_id == current_user.id
+        results.append(MatchResponse(
+            match_id=db_match.id,
+            user_id=candidate.id,
+            alias=candidate.alias,
+            studiengang=candidate.studiengang,
+            lernstil=candidate.lernstil,
+            gemeinsame_faecher=gemeinsame_names,
+            ueberschneidungen=overlaps,
+            score=db_match.score,
+            status=db_match.status,
+            i_requested=i_requested,
+        ))
+        included_partner_ids.add(partner_id)
+
+    # Phase 2: Neue Vorschläge per Algorithmus
     for candidate in candidates:
+        if candidate.id in included_partner_ids:
+            continue
+
         candidate_subject_ids = {us.subject_id for us in candidate.subjects}
         gemeinsame = current_subject_ids & candidate_subject_ids
-
         if not gemeinsame:
             continue
 
@@ -44,16 +78,19 @@ def find_matches(current_user: User, db: Session) -> list[MatchResponse]:
         if not overlaps:
             continue
 
+        db_match = db.query(Match).filter(
+            ((Match.user_a_id == current_user.id) & (Match.user_b_id == candidate.id)) |
+            ((Match.user_b_id == current_user.id) & (Match.user_a_id == candidate.id))
+        ).first()
+
+        if db_match and db_match.status == MatchStatus.abgelehnt:
+            continue
+
         score = _calculate_score(current_user, candidate, gemeinsame, overlaps)
         gemeinsame_names = [
             us.subject.name for us in candidate.subjects if us.subject_id in gemeinsame
         ]
 
-        # Find or create the Match record so the frontend has a valid match_id
-        db_match = db.query(Match).filter(
-            ((Match.user_a_id == current_user.id) & (Match.user_b_id == candidate.id)) |
-            ((Match.user_b_id == current_user.id) & (Match.user_a_id == candidate.id))
-        ).first()
         if not db_match:
             db_match = Match(
                 user_a_id=current_user.id,
@@ -63,22 +100,22 @@ def find_matches(current_user: User, db: Session) -> list[MatchResponse]:
             db.add(db_match)
             db.flush()
 
-        results.append(
-            MatchResponse(
-                match_id=db_match.id,
-                user_id=candidate.id,
-                alias=candidate.alias,
-                studiengang=candidate.studiengang,
-                lernstil=candidate.lernstil,
-                gemeinsame_faecher=gemeinsame_names,
-                ueberschneidungen=overlaps,
-                score=score,
-            )
-        )
+        results.append(MatchResponse(
+            match_id=db_match.id,
+            user_id=candidate.id,
+            alias=candidate.alias,
+            studiengang=candidate.studiengang,
+            lernstil=candidate.lernstil,
+            gemeinsame_faecher=gemeinsame_names,
+            ueberschneidungen=overlaps,
+            score=score,
+            status=db_match.status,
+            i_requested=db_match.requested_by_id == current_user.id if db_match.requested_by_id else False,
+        ))
 
     db.commit()
-    results.sort(key=lambda x: x.score, reverse=True)
-    return results[:10]
+    results.sort(key=lambda x: (x.status == MatchStatus.vorgeschlagen, -x.score))
+    return results[:20]
 
 
 def _find_time_overlaps(

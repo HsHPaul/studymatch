@@ -7,10 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.security import hash_password, verify_password
+from app.models.match import Match
 from app.models.user import User
 from app.models.subject import Subject, UserSubject
 from app.models.availability import Availability
 from app.schemas.profile import (
+    PasswordChange,
     ProfileUpdate,
     ProfileResponse,
     SubjectAdd,
@@ -43,6 +46,18 @@ def update_my_profile(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@router.patch("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    payload: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Aktuelles Passwort ist falsch")
+    current_user.hashed_password = hash_password(payload.new_password)
+    db.commit()
 
 
 @router.get("/me/subjects", response_model=list[SubjectResponse])
@@ -114,4 +129,18 @@ def remove_availability(
     if not avail:
         raise HTTPException(status_code=404, detail="Zeitfenster nicht gefunden")
     db.delete(avail)
+    db.commit()
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_account(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Matches (inkl. Nachrichten und Sessions via Cascade) zuerst löschen,
+    # da kein ON DELETE CASCADE in der DB für matches.user_a/b_id definiert ist.
+    db.query(Match).filter(
+        (Match.user_a_id == current_user.id) | (Match.user_b_id == current_user.id)
+    ).delete(synchronize_session=False)
+    db.delete(current_user)
     db.commit()

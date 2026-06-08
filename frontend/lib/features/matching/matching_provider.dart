@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
@@ -23,6 +24,22 @@ class MatchesNotifier extends StateNotifier<AsyncValue<List<Match>>> {
     } catch (e, st) {
       if (!mounted) return;
       state = AsyncError(e, st);
+    }
+  }
+
+  Future<bool> sendRequest(String matchId) => _updateStatus(matchId, 'request');
+  Future<bool> acceptRequest(String matchId) => _updateStatus(matchId, 'accept');
+  Future<bool> declineRequest(String matchId) => _updateStatus(matchId, 'decline');
+
+  Future<bool> _updateStatus(String matchId, String action) async {
+    try {
+      final dio = _ref.read(dioProvider);
+      await dio.post('/matches/$matchId/$action');
+      if (!mounted) return false;
+      await load();
+      return true;
+    } on DioException {
+      return false;
     }
   }
 }

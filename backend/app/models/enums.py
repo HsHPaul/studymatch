@@ -21,11 +21,13 @@ class Wochentag(str, enum.Enum):
 
 class MatchStatus(str, enum.Enum):
     vorgeschlagen = "vorgeschlagen"
+    angefragt = "angefragt"
     akzeptiert = "akzeptiert"
     abgelehnt = "abgelehnt"
 
 
 class SessionStatus(str, enum.Enum):
+    angefragt = "angefragt"
     geplant = "geplant"
     bestaetigt = "bestaetigt"
     abgesagt = "abgesagt"

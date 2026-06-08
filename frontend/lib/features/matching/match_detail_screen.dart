@@ -7,6 +7,8 @@ import '../../shared/models/match.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import 'matching_provider.dart';
 
+// ignore_for_file: use_build_context_synchronously
+
 class MatchDetailScreen extends ConsumerWidget {
   final String matchId;
 
@@ -41,13 +43,13 @@ class MatchDetailScreen extends ConsumerWidget {
   }
 }
 
-class _MatchDetailView extends StatelessWidget {
+class _MatchDetailView extends ConsumerWidget {
   final Match match;
 
   const _MatchDetailView({required this.match});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
@@ -209,29 +211,104 @@ class _MatchDetailView extends StatelessWidget {
 
             const SizedBox(height: 8),
 
-            // ── Chat Button ──────────────────────────────────────────────
-            FilledButton.icon(
-              icon: const Icon(Icons.chat_rounded),
-              label: const Text('Chat starten'),
-              onPressed: () => context.push('/chat/${match.userId}'),
-            ),
+            // ── Aktions-Button je nach Status ────────────────────────────
+            _ActionButton(match: match),
           ],
         ),
       ),
     );
   }
 
-  String _lernstilLabel(String l) {
-    const labels = {
-      'still': 'Ruhig / Still',
-      'gemischt': 'Gemischt',
-      'diskutierend': 'Diskutierend',
-    };
-    return labels[l] ?? l;
-  }
+  String _lernstilLabel(String l) => const {
+        'still': 'Ruhig / Still',
+        'gemischt': 'Gemischt',
+        'diskutierend': 'Diskutierend',
+      }[l] ?? l;
 
   String _capitalize(String s) =>
       s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+}
+
+// ── Action Button ─────────────────────────────────────────────────────────────
+
+class _ActionButton extends ConsumerWidget {
+  final Match match;
+
+  const _ActionButton({required this.match});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Akzeptiertes Match → Chat
+    if (match.isAccepted) {
+      return FilledButton.icon(
+        icon: const Icon(Icons.chat_rounded),
+        label: const Text('Chat starten'),
+        onPressed: () => context.push('/chat/${match.matchId}'),
+      );
+    }
+
+    // Anfrage von mir gesendet → warten
+    if (match.isPending && match.iRequested) {
+      return FilledButton.icon(
+        icon: const Icon(Icons.hourglass_empty_rounded),
+        label: const Text('Anfrage gesendet – warte auf Bestätigung'),
+        onPressed: null,
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.muted.withValues(alpha: 0.15),
+          foregroundColor: AppColors.muted,
+        ),
+      );
+    }
+
+    // Eingehende Anfrage → annehmen / ablehnen
+    if (match.isPending && !match.iRequested) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FilledButton.icon(
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Anfrage annehmen'),
+            onPressed: () async {
+              final ok = await ref.read(matchesProvider.notifier).acceptRequest(match.matchId);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ok ? 'Match bestätigt!' : 'Fehler beim Bestätigen')),
+                );
+                if (ok) context.go('/matches');
+              }
+            },
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Ablehnen'),
+            onPressed: () async {
+              final ok = await ref.read(matchesProvider.notifier).declineRequest(match.matchId);
+              if (context.mounted) {
+                if (ok) context.go('/matches');
+              }
+            },
+            style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+          ),
+        ],
+      );
+    }
+
+    // Vorschlag → Anfrage senden
+    return FilledButton.icon(
+      icon: const Icon(Icons.person_add_rounded),
+      label: const Text('Match-Anfrage senden'),
+      onPressed: () async {
+        final ok = await ref.read(matchesProvider.notifier).sendRequest(match.matchId);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(ok ? 'Anfrage gesendet!' : 'Fehler beim Senden')),
+          );
+          if (ok) context.go('/matches');
+        }
+      },
+    );
+  }
 }
 
 // ── Section Header ────────────────────────────────────────────────────────────

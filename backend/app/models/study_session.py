@@ -17,7 +17,12 @@ class StudySession(Base):
     raum_id = Column(UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=True)
     datum = Column(Date, nullable=False)
     uhrzeit = Column(Time, nullable=False)
-    status = Column(Enum(SessionStatus, name="session_status_enum", create_type=False), default=SessionStatus.geplant)
+    status = Column(Enum(SessionStatus, name="session_status_enum", create_type=False), default=SessionStatus.angefragt)
+    created_by_id = Column(UUID(as_uuid=True), nullable=True)
+    proposed_datum = Column(Date, nullable=True)
+    proposed_uhrzeit = Column(Time, nullable=True)
+    proposed_raum_id = Column(UUID(as_uuid=True), nullable=True)
+    edit_proposed_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     match = relationship("Match", back_populates="study_sessions")

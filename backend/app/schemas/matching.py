@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import time
 from pydantic import BaseModel
 
-from app.models.enums import Lernstil
+from app.models.enums import Lernstil, MatchStatus
 
 
 class AvailabilityOverlap(BaseModel):
@@ -21,3 +21,5 @@ class MatchResponse(BaseModel):
     gemeinsame_faecher: list[str]
     ueberschneidungen: list[AvailabilityOverlap]
     score: float
+    status: MatchStatus
+    i_requested: bool

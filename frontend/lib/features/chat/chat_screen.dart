@@ -3,7 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_colors.dart';
 import '../../features/auth/auth_provider.dart';
+import '../../features/matching/matching_provider.dart';
+import '../../features/profile/profile_provider.dart';
+import '../../features/sessions/sessions_provider.dart';
 import '../../shared/models/message.dart';
+import '../../shared/models/room.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import 'chat_provider.dart';
 
@@ -39,6 +43,104 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  Future<void> _showSessionDialog(BuildContext context, WidgetRef ref, String matchId) async {
+    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+    TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
+    Room? selectedRoom;
+
+    String fmtDate(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+    String fmtTime(TimeOfDay t) =>
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final rooms = ref.read(roomsProvider);
+          return AlertDialog(
+            title: const Text('Termin vorschlagen'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_today_rounded, size: 16),
+                        label: Text(fmtDate(selectedDate)),
+                        onPressed: () async {
+                          final d = await showDatePicker(
+                            context: ctx,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (d != null) setS(() => selectedDate = d);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.access_time_rounded, size: 16),
+                        label: Text(fmtTime(selectedTime)),
+                        onPressed: () async {
+                          final t = await showTimePicker(
+                            context: ctx, initialTime: selectedTime);
+                          if (t != null) setS(() => selectedTime = t);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                rooms.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (roomList) => DropdownButtonFormField<Room>(
+                    decoration: const InputDecoration(
+                      labelText: 'Raum (optional)',
+                      prefixIcon: Icon(Icons.room_outlined),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Kein Raum')),
+                      ...roomList.map((r) => DropdownMenuItem(value: r, child: Text(r.displayName))),
+                    ],
+                    onChanged: (r) => setS(() => selectedRoom = r),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Abbrechen'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  final ok = await ref.read(sessionsProvider.notifier).createSession(
+                    matchId: matchId,
+                    datum: selectedDate,
+                    uhrzeit: selectedTime,
+                    raumId: selectedRoom?.id,
+                  );
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(ok ? 'Terminanfrage gesendet!' : 'Fehler beim Senden')),
+                    );
+                  }
+                },
+                child: const Text('Anfrage senden'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _send() async {
     final text = _controller.text;
     if (text.trim().isEmpty) return;
@@ -50,7 +152,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final chat = ref.watch(chatProvider(widget.matchId));
-    final authState = ref.watch(authProvider);
+    ref.watch(authProvider); // keep alive
+    final myUserId = ref.watch(profileProvider).profile?.id ?? '';
+    final partnerAlias = ref.watch(matchesProvider).asData?.value
+        .where((m) => m.matchId == widget.matchId)
+        .firstOrNull
+        ?.alias ?? 'Chat';
 
     ref.listen(chatProvider(widget.matchId), (prev, next) {
       if ((prev?.messages.length ?? 0) < next.messages.length) {
@@ -61,8 +168,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Chat'),
+        title: Text(partnerAlias),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_today_rounded),
+            tooltip: 'Termin vorschlagen',
+            onPressed: () => _showSessionDialog(context, ref, widget.matchId),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Icon(
@@ -106,6 +218,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ],
               ),
             ),
+          _PendingSessionsBanner(matchId: widget.matchId),
           Expanded(
             child: chat.isLoading
                 ? const LoadingIndicator(message: 'Nachrichten laden…')
@@ -113,7 +226,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ? const _EmptyChat()
                     : _MessageList(
                         messages: chat.messages,
-                        currentUserId: authState.token ?? '',
+                        myUserId: myUserId,
+                        partnerAlias: partnerAlias,
                         scrollController: _scrollController,
                       ),
           ),
@@ -167,12 +281,14 @@ class _EmptyChat extends StatelessWidget {
 
 class _MessageList extends StatelessWidget {
   final List<Message> messages;
-  final String currentUserId;
+  final String myUserId;
+  final String partnerAlias;
   final ScrollController scrollController;
 
   const _MessageList({
     required this.messages,
-    required this.currentUserId,
+    required this.myUserId,
+    required this.partnerAlias,
     required this.scrollController,
   });
 
@@ -184,14 +300,16 @@ class _MessageList extends StatelessWidget {
       itemCount: messages.length,
       itemBuilder: (context, i) {
         final msg = messages[i];
-        final isMe = _isOwnMessage(msg);
-        return _MessageBubble(message: msg, isMe: isMe);
+        final isMe = msg.senderId == myUserId;
+        final showName = !isMe &&
+            (i == 0 || messages[i - 1].senderId != msg.senderId);
+        return _MessageBubble(
+          message: msg,
+          isMe: isMe,
+          senderName: showName ? partnerAlias : null,
+        );
       },
     );
-  }
-
-  bool _isOwnMessage(Message msg) {
-    return false;
   }
 }
 
@@ -200,58 +318,82 @@ class _MessageList extends StatelessWidget {
 class _MessageBubble extends StatelessWidget {
   final Message message;
   final bool isMe;
+  final String? senderName;
 
-  const _MessageBubble({required this.message, required this.isMe});
+  const _MessageBubble({
+    required this.message,
+    required this.isMe,
+    this.senderName,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
 
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 3),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.72,
-        ),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isMe ? AppColors.primary : AppColors.cardWhite,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMe ? 18 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 18),
-          ),
-          boxShadow: isMe
-              ? null
-              : const [
-                  BoxShadow(
-                    color: Color(0x0A000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Column(
           crossAxisAlignment:
               isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Text(
-              message.content,
-              style: tt.bodyMedium?.copyWith(
-                color: isMe ? Colors.white : AppColors.navy,
+            if (senderName != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 2),
+                child: Text(
+                  senderName!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary.withValues(alpha: 0.8),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _formatTime(message.sentAt),
-              style: TextStyle(
-                fontSize: 10,
-                color: isMe
-                    ? Colors.white.withValues(alpha: 0.7)
-                    : AppColors.muted,
+            Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.72,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isMe ? AppColors.primary : AppColors.cardWhite,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(18),
+                  topRight: const Radius.circular(18),
+                  bottomLeft: Radius.circular(isMe ? 18 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 18),
+                ),
+                boxShadow: isMe
+                    ? null
+                    : const [
+                        BoxShadow(
+                          color: Color(0x0A000000),
+                          blurRadius: 6,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+              ),
+              child: Column(
+                crossAxisAlignment:
+                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    message.content,
+                    style: tt.bodyMedium?.copyWith(
+                      color: isMe ? Colors.white : AppColors.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatTime(message.sentAt),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isMe
+                          ? Colors.white.withValues(alpha: 0.7)
+                          : AppColors.muted,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -264,6 +406,84 @@ class _MessageBubble extends StatelessWidget {
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+}
+
+// ── Pending Sessions Banner ───────────────────────────────────────────────────
+
+class _PendingSessionsBanner extends ConsumerWidget {
+  final String matchId;
+
+  const _PendingSessionsBanner({required this.matchId});
+
+  String _fmtDate(String datum) {
+    final parts = datum.split('-');
+    if (parts.length != 3) return datum;
+    return '${parts[2]}.${parts[1]}.${parts[0]}';
+  }
+
+  String _fmtTime(String uhrzeit) => uhrzeit.length >= 5 ? uhrzeit.substring(0, 5) : uhrzeit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pending = ref.watch(pendingSessionsProvider(matchId));
+
+    return pending.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (sessions) {
+        if (sessions.isEmpty) return const SizedBox.shrink();
+        return Container(
+          color: AppColors.primaryLight,
+          child: Column(
+            children: sessions.map((s) => Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Terminanfrage: ${_fmtDate(s.datum)} um ${_fmtTime(s.uhrzeit)} Uhr',
+                      style: const TextStyle(fontSize: 13, color: AppColors.navy),
+                    ),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.error,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                    onPressed: () async {
+                      await ref.read(sessionsProvider.notifier).declineSession(s.id);
+                      ref.invalidate(pendingSessionsProvider(matchId));
+                    },
+                    child: const Text('Ablehnen'),
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      textStyle: const TextStyle(fontSize: 12),
+                      minimumSize: Size.zero,
+                    ),
+                    onPressed: () async {
+                      final ok = await ref.read(sessionsProvider.notifier).acceptSession(s.id);
+                      ref.invalidate(pendingSessionsProvider(matchId));
+                      if (ok && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Termin bestätigt!')),
+                        );
+                      }
+                    },
+                    child: const Text('Annehmen'),
+                  ),
+                ],
+              ),
+            )).toList(),
+          ),
+        );
+      },
+    );
   }
 }
 

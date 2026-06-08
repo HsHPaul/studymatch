@@ -49,6 +49,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void _clearUserData() {
+    _ref.read(sessionExpiredProvider.notifier).state = false;
     _ref.invalidate(profileProvider);
     _ref.invalidate(matchesProvider);
     _ref.invalidate(sessionsProvider);
@@ -78,11 +79,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _storage.write(key: tokenKey, value: token);
       _clearUserData();
       state = AuthState(token: token);
-    } on DioException catch (e) {
-      final detail = e.response?.data?['detail'];
+    } on DioException catch (_) {
       state = state.copyWith(
         isLoading: false,
-        error: detail?.toString() ?? 'Login fehlgeschlagen',
+        error: 'E-Mail oder Passwort ist nicht korrekt.',
       );
     }
   }

@@ -197,6 +197,44 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     }
   }
 
+  Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _dio.patch('/profiles/me/password', data: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      });
+      if (!mounted) return false;
+      state = state.copyWith(isSaving: false);
+      return true;
+    } on DioException catch (e) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        isSaving: false,
+        error: e.response?.data?['detail']?.toString() ?? 'Passwort konnte nicht geändert werden',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> deleteAccount() async {
+    state = state.copyWith(isSaving: true, clearError: true);
+    try {
+      await _dio.delete('/profiles/me');
+      return true;
+    } on DioException catch (e) {
+      if (!mounted) return false;
+      state = state.copyWith(
+        isSaving: false,
+        error: e.response?.data?['detail']?.toString() ?? 'Account konnte nicht gelöscht werden',
+      );
+      return false;
+    }
+  }
+
   Future<void> _reloadSubjects() async {
     final res = await _dio.get('/profiles/me/subjects');
     state = state.copyWith(

@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token
 from app.core.limiter import limiter
 from app.models.user import User
-from app.schemas.auth import RegisterRequest, LoginRequest, Token
+from app.schemas.auth import RegisterRequest, LoginRequest, PasswordResetRequest, Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,3 +37,14 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Ungültige Anmeldedaten")
     return Token(access_token=create_access_token(str(user.id)))
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
+def reset_password(request: Request, payload: PasswordResetRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        # Gleiche Antwort unabhängig davon ob die E-Mail existiert (kein User-Enumeration)
+        return
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()

@@ -1,7 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
 import '../../shared/widgets/study_match_logo.dart';
 import 'auth_provider.dart';
@@ -25,6 +27,130 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final emailCtrl = TextEditingController();
+    final newPwCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    var isSaving = false;
+    String? dialogError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Passwort zurücksetzen'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Gib deine E-Mail-Adresse und ein neues Passwort ein.',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: emailCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'E-Mail',
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  validator: (v) => v != null && v.contains('@')
+                      ? null
+                      : 'Gültige E-Mail eingeben',
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: newPwCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Neues Passwort',
+                    prefixIcon: Icon(Icons.lock_reset_outlined),
+                  ),
+                  validator: (v) => v != null && v.length >= 8
+                      ? null
+                      : 'Mindestens 8 Zeichen',
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: confirmCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Passwort bestätigen',
+                    prefixIcon: Icon(Icons.lock_reset_outlined),
+                  ),
+                  validator: (v) =>
+                      v == newPwCtrl.text ? null : 'Passwörter stimmen nicht überein',
+                ),
+                if (dialogError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    dialogError!,
+                    style: const TextStyle(color: AppColors.error, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final email = emailCtrl.text.trim();
+                      final newPw = newPwCtrl.text;
+                      setDialogState(() {
+                        isSaving = true;
+                        dialogError = null;
+                      });
+                      try {
+                        final dio = Dio(BaseOptions(baseUrl: baseUrl));
+                        await dio.post('/auth/reset-password', data: {
+                          'email': email,
+                          'new_password': newPw,
+                        });
+                        if (ctx.mounted) Navigator.of(ctx).pop();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Passwort wurde zurückgesetzt. Du kannst dich jetzt einloggen.'),
+                            ),
+                          );
+                        }
+                      } on DioException {
+                        setDialogState(() {
+                          isSaving = false;
+                          dialogError = 'Zurücksetzen fehlgeschlagen. Bitte versuche es erneut.';
+                        });
+                      }
+                    },
+              child: isSaving
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Zurücksetzen'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    emailCtrl.dispose();
+    newPwCtrl.dispose();
+    confirmCtrl.dispose();
   }
 
   Future<void> _submit() async {
@@ -211,7 +337,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           const Spacer(),
                           TextButton(
-                            onPressed: () {},
+                            onPressed: _showForgotPasswordDialog,
                             style: TextButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 4, vertical: 0),

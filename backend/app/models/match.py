@@ -17,6 +17,7 @@ class Match(Base):
     user_b_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     score = Column(Float, default=0.0)
     status = Column(Enum(MatchStatus, name="match_status_enum", create_type=False), default=MatchStatus.vorgeschlagen)
+    requested_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     messages = relationship("Message", back_populates="match", cascade="all, delete-orphan")

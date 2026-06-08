@@ -14,6 +14,12 @@ class StudySessionCreate(BaseModel):
     raum_id: UUID | None = None
 
 
+class SessionEditPropose(BaseModel):
+    datum: date
+    uhrzeit: time
+    raum_id: UUID | None = None
+
+
 class StudySessionResponse(OrmBase):
     id: UUID
     match_id: UUID
@@ -21,3 +27,10 @@ class StudySessionResponse(OrmBase):
     uhrzeit: time
     status: SessionStatus
     raum_id: UUID | None
+    partner_alias: str
+    created_by_id: UUID | None
+    proposed_datum: date | None
+    proposed_uhrzeit: time | None
+    proposed_raum_id: UUID | None
+    edit_proposed_by_id: UUID | None
+    i_proposed_edit: bool

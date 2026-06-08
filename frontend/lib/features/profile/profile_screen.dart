@@ -71,6 +71,122 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     setState(() => _editing = true);
   }
 
+  Future<void> _showChangePasswordDialog() async {
+    final currentCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Passwort ändern'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: currentCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Aktuelles Passwort',
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+                validator: (v) =>
+                    v != null && v.isNotEmpty ? null : 'Pflichtfeld',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: newCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Neues Passwort',
+                  prefixIcon: Icon(Icons.lock_reset_outlined),
+                ),
+                validator: (v) => v != null && v.length >= 8
+                    ? null
+                    : 'Mindestens 8 Zeichen',
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: confirmCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Neues Passwort bestätigen',
+                  prefixIcon: Icon(Icons.lock_reset_outlined),
+                ),
+                validator: (v) => v == newCtrl.text
+                    ? null
+                    : 'Passwörter stimmen nicht überein',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              final currentPw = currentCtrl.text;
+              final newPw = newCtrl.text;
+              Navigator.of(ctx).pop();
+              final ok = await ref
+                  .read(profileProvider.notifier)
+                  .changePassword(
+                    currentPassword: currentPw,
+                    newPassword: newPw,
+                  );
+              if (ok && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Passwort erfolgreich geändert'),
+                  ),
+                );
+              }
+            },
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Account wirklich löschen?'),
+        content: const Text(
+          'Dein Account wird vollständig und unwiderruflich gelöscht – '
+          'einschließlich Profil, Fächer, Verfügbarkeiten, Matches und Nachrichten. '
+          'Diese Aktion kann nicht rückgängig gemacht werden.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Ja, Account löschen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final ok = await ref.read(profileProvider.notifier).deleteAccount();
+    if (ok && mounted) {
+      await ref.read(authProvider.notifier).logout();
+    }
+  }
+
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
     final ok = await ref.read(profileProvider.notifier).updateProfile(
@@ -109,6 +225,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onPressed: () => _startEditing(ps),
               tooltip: 'Bearbeiten',
             ),
+          IconButton(
+            icon: const Icon(Icons.password_outlined),
+            onPressed: _showChangePasswordDialog,
+            tooltip: 'Passwort ändern',
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             onPressed: () => ref.read(authProvider.notifier).logout(),
@@ -152,6 +273,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _SubjectsSection(mySubjects: ps.mySubjects),
               const SizedBox(height: 20),
               _AvailabilitySection(availabilities: ps.myAvailabilities),
+              const SizedBox(height: 40),
+              const Divider(),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: ps.isSaving ? null : _confirmDeleteAccount,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red.shade400,
+                ),
+                child: const Text('Account löschen'),
+              ),
             ],
           ),
         ),

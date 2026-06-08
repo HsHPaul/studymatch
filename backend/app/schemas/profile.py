@@ -38,6 +38,11 @@ class AvailabilityResponse(OrmBase):
     end_time: time
 
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
 class ProfileUpdate(BaseModel):
     alias: str | None = Field(default=None, min_length=2, max_length=50)
     studiengang: str | None = None

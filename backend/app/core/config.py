@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    cors_origins: str = ""  # kommagetrennte erlaubte Frontend-Origins (Produktion)
 
     model_config = {"env_file": ".env"}
 

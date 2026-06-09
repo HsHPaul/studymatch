@@ -1,0 +1,22 @@
+# Render Blueprint für das StudyMatch-Backend.
+# Anlegen über das Render-Dashboard: New → Blueprint → dieses Repo wählen.
+services:
+  - type: web
+    name: studymatch-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health        # /health existiert bereits in app/main.py
+    envVars:
+      # Supabase Session-Pooler-String (IPv4!) – im Dashboard manuell setzen.
+      - key: DATABASE_URL
+        sync: false
+      # Render generiert beim ersten Deploy ein sicheres Zufalls-Secret.
+      - key: SECRET_KEY
+        generateValue: true
+      # Frontend-Domain(s), kommagetrennt – im Dashboard setzen (für reine APK-Nutzung leer).
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "30"

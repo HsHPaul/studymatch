@@ -16,4 +16,4 @@ COPY . .
 # passt zum Free-Tier-RAM und zum WebSocket-Chat (kein Shared State nötig).
 # exec ersetzt die Shell durch uvicorn → uvicorn wird PID 1 und fährt bei
 # SIGTERM (Render-Spin-down) sauber herunter.
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

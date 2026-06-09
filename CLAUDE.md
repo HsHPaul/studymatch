@@ -116,6 +116,36 @@ Scoring: Fach 40 % | Lernstil 25 % | Zeitüberlappung 20 % | Studiengang 10 % | 
 ## Neue Endpunkte (seit Sprint 2)
 - `GET /api/v1/profiles/subjects` — alle verfügbaren Fächer aus der DB (für Fach-Picker im Profil)
 
+## Deployment
+
+### URLs
+- **Web-App (Frontend)**: https://hshpaul.github.io/studymatch/
+- **Backend (API)**: https://studymatch-wsob.onrender.com
+- **API-Docs**: https://studymatch-wsob.onrender.com/docs
+
+### Remotes
+- `origin` → GitLab (Entwicklung, Team arbeitet hier)
+- `github` → GitHub HsHPaul/studymatch (nur für Deployment)
+
+### Neue Version deployen
+```bash
+# 1. Neuesten Stand von GitLab holen
+git pull origin main
+
+# 2. Backend deployen (Render deployed automatisch bei Push)
+git push github main
+
+# 3. Frontend neu bauen und deployen
+cd frontend
+flutter build web --base-href /studymatch/
+cd build/web
+git add -A && git commit -m "deploy: neuer Build"
+git push "https://HsHPaul:<TOKEN>@github.com/HsHPaul/studymatch.git" HEAD:gh-pages --force
+cd ../../..
+```
+
+> GitHub-Token für HsHPaul-Account nötig (bei Paul). Render deployed das Backend automatisch sobald `github main` aktualisiert wird.
+
 ## Was Claude NICHT tun soll
 - Kein ML/KI im Matching – regelbasiert reicht für MVP
 - Keine Over-Engineering (KISS-Prinzip)

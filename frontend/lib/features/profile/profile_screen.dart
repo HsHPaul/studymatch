@@ -494,7 +494,7 @@ class _EditForm extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: selectedLernstil,
+              value: selectedLernstil,
               decoration: const InputDecoration(
                 labelText: 'Lernstil',
                 prefixIcon: Icon(Icons.psychology_outlined),
@@ -938,7 +938,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<String>(
-            initialValue: _wochentag,
+            value: _wochentag,
             decoration: const InputDecoration(labelText: 'Wochentag'),
             items: _wochentage
                 .map((d) => DropdownMenuItem(

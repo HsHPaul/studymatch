@@ -4,7 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 const String baseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost:8000/api/v1',
+  defaultValue: 'https://studymatch-wsob.onrender.com/api/v1',
 );
 const String tokenKey = 'jwt_token';
 

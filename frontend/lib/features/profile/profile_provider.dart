@@ -141,6 +141,10 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
   }
 
   Future<void> addSubject(String subjectId) async {
+    if (state.mySubjects.length >= 5) {
+      state = state.copyWith(error: 'Du kannst maximal 5 Fächer gleichzeitig hinzufügen.');
+      return;
+    }
     try {
       await _dio.post('/profiles/me/subjects', data: {'subject_id': subjectId});
       await _reloadSubjects();
@@ -179,6 +183,27 @@ class ProfileNotifier extends StateNotifier<ProfileState> {
     } on DioException catch (e) {
       state = state.copyWith(
         error: e.response?.data?['detail']?.toString() ?? 'Zeitfenster konnte nicht hinzugefügt werden',
+      );
+    }
+  }
+
+  Future<void> updateAvailability({
+    required String id,
+    required String wochentag,
+    required TimeOfDay startTime,
+    required TimeOfDay endTime,
+  }) async {
+    try {
+      await _dio.patch('/profiles/me/availabilities/$id', data: {
+        'wochentag': wochentag,
+        'start_time': _formatTime(startTime),
+        'end_time': _formatTime(endTime),
+      });
+      await _reloadAvailabilities();
+    } on DioException catch (e) {
+      state = state.copyWith(
+        error: e.response?.data?['detail']?.toString() ??
+            'Zeitfenster konnte nicht aktualisiert werden',
       );
     }
   }

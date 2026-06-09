@@ -1,5 +1,7 @@
 # Einstiegspunkt der FastAPI-Anwendung.
 # Registriert alle Router und globale Middleware (CORS erlaubt Anfragen vom Flutter-Frontend).
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -7,12 +9,22 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
-from app.api import auth, profiles, matching, chat, sessions, rooms
+from app.api import auth, profiles, matching, chat, sessions, rooms, notifications
+from app.core.cleanup import scheduler, delete_inactive_users
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.limiter import limiter
 
-app = FastAPI(title="StudyMatch API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    delete_inactive_users()  # einmal direkt beim Start prüfen
+    scheduler.start()
+    yield
+    scheduler.shutdown()
+
+
+app = FastAPI(title="StudyMatch API", version="0.1.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -33,6 +45,7 @@ app.include_router(matching.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(rooms.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
 
 
 @app.get("/health")

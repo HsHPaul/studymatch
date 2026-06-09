@@ -26,3 +26,4 @@ flutter:
   assets:
     - assets/hsh_logo.png
     - assets/login_illustration.png
+    - assets/blacklist.json

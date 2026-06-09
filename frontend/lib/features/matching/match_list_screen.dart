@@ -26,12 +26,44 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (ref.read(pendingChatPolicyProvider)) {
+        ref.read(pendingChatPolicyProvider.notifier).state = false;
+        _showChatPolicyDialog(context);
+      }
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _showChatPolicyDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: AppColors.primary),
+            const SizedBox(width: 10),
+            const Text('Hinweis'),
+          ],
+        ),
+        content: const Text(
+          'Bleib respektvoll: Beleidigungen, Diskriminierung, Bedrohungen und unangemessene Inhalte sind im Chat nicht erlaubt.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Verstanden'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -45,20 +77,17 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
     final state = ref.watch(matchesProvider);
 
     return state.when(
-      loading: () => const Scaffold(
-        backgroundColor: AppColors.background,
-        body: LoadingIndicator(message: 'Lade Matches…'),
+      loading: () => Scaffold(
+        body: const LoadingIndicator(message: 'Lade Matches…'),
       ),
       error: (e, _) {
         if (!ref.watch(authProvider).isAuthenticated) {
-          return const Scaffold(
-            backgroundColor: AppColors.background,
-            body: LoadingIndicator(message: 'Lade Matches…'),
+          return Scaffold(
+                body: const LoadingIndicator(message: 'Lade Matches…'),
           );
         }
         return Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(title: const Text('Matches')),
+            appBar: AppBar(title: const Text('Matches')),
           body: ErrorView(
             message: 'Fehler beim Laden.',
             onRetry: () => ref.read(matchesProvider.notifier).load(),
@@ -71,8 +100,7 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
         final suggestions = matches.where((m) => m.isSuggestion || (m.isPending && m.iRequested)).toList();
 
         return Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(
+            appBar: AppBar(
             title: const Text('Matches'),
             actions: [
               IconButton(
@@ -84,7 +112,7 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
             bottom: TabBar(
               controller: _tabController,
               tabs: [
-                const Tab(text: 'Bestätigt'),
+                const Tab(text: 'Angenommen'),
                 Tab(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -137,9 +165,9 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
   }
 }
 
-// ── Match Tab (Bestätigt & Vorschläge) ───────────────────────────────────────
+// ── Match Tab (Angenommen, with local filter) ────────────────────────────────
 
-class _MatchTab extends ConsumerWidget {
+class _MatchTab extends ConsumerStatefulWidget {
   final List<Match> matches;
   final IconData emptyIcon;
   final String emptyTitle;
@@ -153,23 +181,83 @@ class _MatchTab extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    if (matches.isEmpty) {
-      return _EmptyState(
-        icon: emptyIcon,
-        title: emptyTitle,
-        subtitle: emptySubtitle,
-      );
-    }
-    return RefreshIndicator(
-      color: AppColors.primary,
-      onRefresh: () => ref.read(matchesProvider.notifier).load(),
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        itemCount: matches.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, i) => _MatchCard(match: matches[i]),
-      ),
+  ConsumerState<_MatchTab> createState() => _MatchTabState();
+}
+
+class _MatchTabState extends ConsumerState<_MatchTab> {
+  bool _showFilter = false;
+  int _currentMin = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = widget.matches
+        .where((m) => m.scorePercent >= _currentMin)
+        .toList();
+
+    return Column(
+      children: [
+        Container(
+          color: AppColors.cardWhite,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(
+                _currentMin == 0 ? 'Alle anzeigen' : 'Ab $_currentMin% Match',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                onPressed: () => setState(() => _showFilter = !_showFilter),
+                child: Text(_showFilter ? 'Schließen' : 'Anpassen'),
+              ),
+            ],
+          ),
+        ),
+        if (_showFilter)
+          _FilterPanel(
+            currentMin: _currentMin,
+            isSaving: false,
+            buttonLabel: 'Anwenden',
+            onChanged: (val) {
+              setState(() {
+                _currentMin = val;
+                _showFilter = false;
+              });
+            },
+          ),
+        Expanded(
+          child: filtered.isEmpty
+              ? _EmptyState(
+                  icon: widget.emptyIcon,
+                  title: _currentMin > 0
+                      ? 'Keine Matches ab $_currentMin%'
+                      : widget.emptyTitle,
+                  subtitle: _currentMin > 0
+                      ? 'Senke den Mindest-Prozentwert.'
+                      : widget.emptySubtitle,
+                )
+              : RefreshIndicator(
+                  color: AppColors.primary,
+                  onRefresh: () => ref.read(matchesProvider.notifier).load(),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, i) =>
+                        _MatchCard(match: filtered[i]),
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
@@ -203,7 +291,7 @@ class _SuggestionsTabState extends ConsumerState<_SuggestionsTab> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              const Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
+              Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(
                 currentMin == 0 ? 'Alle anzeigen' : 'Ab $currentMin% Match',
@@ -271,11 +359,13 @@ class _FilterPanel extends StatefulWidget {
   final int currentMin;
   final bool isSaving;
   final ValueChanged<int> onChanged;
+  final String buttonLabel;
 
   const _FilterPanel({
     required this.currentMin,
     required this.isSaving,
     required this.onChanged,
+    this.buttonLabel = 'Speichern',
   });
 
   @override
@@ -338,7 +428,7 @@ class _FilterPanelState extends State<_FilterPanel> {
                       height: 18, width: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Speichern'),
+                  : Text(widget.buttonLabel),
             ),
           ),
         ],
@@ -432,7 +522,7 @@ class _IncomingCard extends ConsumerWidget {
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 6),
-                labelStyle: const TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
+                labelStyle: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
               )).toList(),
             ),
           ],
@@ -504,7 +594,7 @@ class _EmptyState extends StatelessWidget {
               SizedBox(
                 width: 88, height: 88,
                 child: DecoratedBox(
-                  decoration: const BoxDecoration(color: AppColors.primaryLight, shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: AppColors.primaryLight, shape: BoxShape.circle),
                   child: Center(child: Icon(icon, size: 44, color: AppColors.primary)),
                 ),
               ),
@@ -516,13 +606,13 @@ class _EmptyState extends StatelessWidget {
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(14),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.all(Radius.circular(14)),
+                    borderRadius: const BorderRadius.all(Radius.circular(14)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline_rounded, size: 18, color: AppColors.primary),
+                      Icon(Icons.info_outline_rounded, size: 18, color: AppColors.primary),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -574,7 +664,7 @@ class _MatchCard extends StatelessWidget {
         boxShadow: const [BoxShadow(color: Color(0x0F000000), blurRadius: 16, offset: Offset(0, 4))],
       ),
       child: InkWell(
-        onTap: () => context.go('/matches/${match.userId}'),
+        onTap: match.isAccepted ? null : () => context.go('/matches/${match.userId}'),
         borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -619,13 +709,30 @@ class _MatchCard extends StatelessWidget {
                           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
                           padding: const EdgeInsets.symmetric(horizontal: 6),
-                          labelStyle: const TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
+                          labelStyle: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
                         )).toList(),
                       ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              if (match.isAccepted) ...[
+                IconButton(
+                  icon: const Icon(Icons.person_outline_rounded),
+                  color: AppColors.primary,
+                  tooltip: 'Profil anzeigen',
+                  onPressed: () => context.go('/matches/${match.userId}'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.forum_rounded),
+                  color: AppColors.primary,
+                  tooltip: 'Chat öffnen',
+                  onPressed: () => context.go('/chat/${match.matchId}'),
+                ),
+              ] else ...[
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+              ],
+              const SizedBox(width: 4),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -638,8 +745,6 @@ class _MatchCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
             ],
           ),
         ),
@@ -652,20 +757,21 @@ class _MatchCard extends StatelessWidget {
 
 class _ScoreCircle extends StatelessWidget {
   final int score;
-  final Color color;
+  final Color? color;
 
-  const _ScoreCircle({required this.score, this.color = AppColors.primary});
+  const _ScoreCircle({required this.score, this.color});
 
   @override
   Widget build(BuildContext context) {
+    final c = color ?? AppColors.primary;
     return SizedBox(
       width: 54, height: 54,
       child: CustomPaint(
-        painter: _ScoreCirclePainter(score: score, color: color),
+        painter: _ScoreCirclePainter(score: score, color: c),
         child: Center(
           child: Text(
             '$score%',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: c),
           ),
         ),
       ),

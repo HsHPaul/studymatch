@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/time_picker_utils.dart';
+import '../../core/blacklist_service.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/matching/matching_provider.dart';
 import '../../features/profile/profile_provider.dart';
@@ -23,13 +25,16 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  String? _blacklistError;
 
   @override
   void initState() {
     super.initState();
-    // Beim Öffnen des Chats immer aktuelle Terminanfragen laden
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.invalidate(pendingSessionsProvider(widget.matchId));
+    });
+    _controller.addListener(() {
+      if (_blacklistError != null) setState(() => _blacklistError = null);
     });
   }
 
@@ -55,6 +60,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _showSessionDialog(BuildContext context, WidgetRef ref, String matchId) async {
     DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
     TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
+    TimeOfDay? selectedTimeEnde;
     Room? selectedRoom;
 
     String fmtDate(DateTime d) =>
@@ -93,11 +99,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Expanded(
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.access_time_rounded, size: 16),
-                        label: Text(fmtTime(selectedTime)),
+                        label: Text('Von: ${fmtTime(selectedTime)}'),
                         onPressed: () async {
-                          final t = await showTimePicker(
-                            context: ctx, initialTime: selectedTime);
+                          final t = await showTimePicker24h(ctx, initialTime: selectedTime);
                           if (t != null) setS(() => selectedTime = t);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.access_time_filled_rounded, size: 16),
+                        label: Text(selectedTimeEnde != null ? 'Bis: ${fmtTime(selectedTimeEnde!)}' : 'Bis: –'),
+                        onPressed: () async {
+                          final t = await showTimePicker24h(ctx, initialTime: selectedTimeEnde ?? selectedTime);
+                          if (t != null) setS(() => selectedTimeEnde = t);
                         },
                       ),
                     ),
@@ -133,6 +149,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     matchId: matchId,
                     datum: selectedDate,
                     uhrzeit: selectedTime,
+                    uhrzeitEnde: selectedTimeEnde,
                     raumId: selectedRoom?.id,
                   );
                   if (context.mounted) {
@@ -154,6 +171,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _send() async {
     final text = _controller.text;
     if (text.trim().isEmpty) return;
+    final blacklist = await ref.read(blacklistProvider.future);
+    final error = blacklist.checkChat(text);
+    if (error != null) {
+      if (mounted) setState(() => _blacklistError = error);
+      return;
+    }
     _controller.clear();
     await ref.read(chatProvider(widget.matchId).notifier).sendMessage(text);
     _scrollToBottom();
@@ -176,7 +199,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(partnerAlias),
         actions: [
@@ -184,11 +206,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Aktualisieren',
             onPressed: () => ref.invalidate(pendingSessionsProvider(widget.matchId)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.calendar_today_rounded),
-            tooltip: 'Termin vorschlagen',
-            onPressed: () => _showSessionDialog(context, ref, widget.matchId),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -246,7 +263,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         scrollController: _scrollController,
                       ),
           ),
-          _InputBar(controller: _controller, onSend: _send),
+          if (_blacklistError != null)
+            Container(
+              width: double.infinity,
+              color: const Color(0xFFFFF3CD),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline_rounded,
+                      size: 16, color: Color(0xFF856404)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _blacklistError!,
+                      style: const TextStyle(
+                          color: Color(0xFF856404), fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          _InputBar(
+            controller: _controller,
+            onSend: _send,
+            onSession: () => _showSessionDialog(context, ref, widget.matchId),
+          ),
         ],
       ),
     );
@@ -265,7 +306,7 @@ class _EmptyChat extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(
+          SizedBox(
             width: 80,
             height: 80,
             child: DecoratedBox(
@@ -455,12 +496,12 @@ class _PendingSessionsBanner extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
+                  Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.primary),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Terminanfrage: ${_fmtDate(s.datum)} um ${_fmtTime(s.uhrzeit)} Uhr',
-                      style: const TextStyle(fontSize: 13, color: AppColors.navy),
+                      style: TextStyle(fontSize: 13, color: AppColors.navy),
                     ),
                   ),
                   TextButton(
@@ -507,15 +548,20 @@ class _PendingSessionsBanner extends ConsumerWidget {
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
+  final VoidCallback onSession;
 
-  const _InputBar({required this.controller, required this.onSend});
+  const _InputBar({
+    required this.controller,
+    required this.onSend,
+    required this.onSession,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.cardWhite,
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Color(0x12000000),
             blurRadius: 12,
@@ -525,9 +571,15 @@ class _InputBar extends StatelessWidget {
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          padding: const EdgeInsets.fromLTRB(8, 10, 16, 10),
           child: Row(
             children: [
+              IconButton(
+                icon: const Icon(Icons.calendar_month_rounded),
+                color: AppColors.primary,
+                tooltip: 'Termin vorschlagen',
+                onPressed: onSession,
+              ),
               Expanded(
                 child: TextField(
                   controller: controller,
@@ -547,7 +599,7 @@ class _InputBar extends StatelessWidget {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(28),
-                      borderSide: const BorderSide(
+                      borderSide: BorderSide(
                           color: AppColors.primary, width: 2),
                     ),
                     filled: true,

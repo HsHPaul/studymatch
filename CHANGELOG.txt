@@ -1,0 +1,39 @@
+CHANGELOG – StudyMatch
+Stand: 09.06.2026
+================================================================================
+
+Neue Funktionen
+---------------
+
+Verfügbarkeiten bearbeiten
+  Im Profil können Zeitfenster jetzt nicht nur gelöscht, sondern auch
+  nachträglich bearbeitet werden. Dazu gibt es ein Stift-Icon neben
+  dem Papierkorb-Icon.
+
+24h-Uhrzeit auf Deutsch
+  Bei der Auswahl von Uhrzeiten (z. B. beim Erstellen eines Termins)
+  wird jetzt das 24-Stunden-Format angezeigt. Alle Beschriftungen
+  sind auf Deutsch.
+
+Tagesfilter im Kalender
+  Im Termine-Tab kann man einen Tag im Kalender antippen, um nur die
+  Termine dieses Tages angezeigt zu bekommen. Über den Link
+  "Alle Termine wieder anzeigen" im Kalender-Header wird der Filter
+  aufgehoben.
+
+Dark Mode
+  Im Profil-Tab gibt es oben rechts einen Button zum Wechsel zwischen
+  hellem und dunklem Design. Die Auswahl bleibt auch nach dem Schließen
+  der App gespeichert.
+
+Tab-Animationen
+  Beim Wechsel zwischen den Tabs gleitet der Inhalt jetzt von links
+  nach rechts oder umgekehrt – je nachdem in welche Richtung man
+  wechselt.
+
+Scoregrenze im "Angenommen"-Tab
+  Genau wie im "Vorschläge"-Tab gibt es jetzt auch im "Angenommen"-Tab
+  einen Schieberegler, mit dem man eine Mindest-Übereinstimmung
+  festlegen kann. Beide Regler funktionieren unabhängig voneinander.
+
+================================================================================

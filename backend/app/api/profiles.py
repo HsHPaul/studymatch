@@ -19,6 +19,7 @@ from app.schemas.profile import (
     SubjectAdd,
     SubjectResponse,
     AvailabilityCreate,
+    AvailabilityUpdate,
     AvailabilityResponse,
 )
 
@@ -111,6 +112,30 @@ def add_availability(
 ):
     avail = Availability(user_id=current_user.id, **payload.model_dump())
     db.add(avail)
+    db.commit()
+    db.refresh(avail)
+    return avail
+
+
+@router.patch("/me/availabilities/{availability_id}", response_model=AvailabilityResponse)
+def update_availability(
+    availability_id: UUID,
+    payload: AvailabilityUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    avail = db.query(Availability).filter(
+        Availability.id == availability_id,
+        Availability.user_id == current_user.id,
+    ).first()
+    if not avail:
+        raise HTTPException(status_code=404, detail="Zeitfenster nicht gefunden")
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(avail, field, value)
+    start = avail.start_time
+    end = avail.end_time
+    if end <= start:
+        raise HTTPException(status_code=400, detail="Endzeit muss nach Startzeit liegen")
     db.commit()
     db.refresh(avail)
     return avail

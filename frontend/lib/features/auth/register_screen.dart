@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/blacklist_service.dart';
 import '../../shared/widgets/study_match_logo.dart';
 import 'auth_provider.dart';
 
@@ -20,6 +21,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _passwordController = TextEditingController();
   final _studiengangController = TextEditingController();
   bool _obscurePassword = true;
+  Blacklist? _blacklist;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(blacklistProvider.future).then((bl) {
+      if (mounted) setState(() => _blacklist = bl);
+    });
+  }
 
   @override
   void dispose() {
@@ -38,6 +48,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           password: _passwordController.text,
           studiengang: _studiengangController.text.trim(),
         );
+    if (mounted && ref.read(authProvider).isAuthenticated) {
+      ref.read(pendingChatPolicyProvider.notifier).state = true;
+    }
   }
 
   @override
@@ -46,10 +59,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
-        leading: IconButton(
+          leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.go('/login'),
         ),
@@ -108,10 +119,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 helperText: 'Wie sollen andere dich nennen?',
                               ),
                               textInputAction: TextInputAction.next,
+                              autovalidateMode:
+                                  AutovalidateMode.onUserInteraction,
                               validator: (v) {
                                 if (v == null || v.trim().length < 2) {
                                   return 'Mindestens 2 Zeichen erforderlich';
                                 }
+                                final blocked = _blacklist?.checkChat(v.trim());
+                                if (blocked != null) return blocked;
                                 return null;
                               },
                             ),
@@ -125,9 +140,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
                               autocorrect: false,
-                              validator: (v) => v != null && v.contains('@')
-                                  ? null
-                                  : 'Gültige E-Mail eingeben',
+                              autovalidateMode:
+                                  AutovalidateMode.onUserInteraction,
+                              validator: (v) {
+                                if (v == null || !v.contains('@')) {
+                                  return 'Gültige E-Mail eingeben';
+                                }
+                                return _blacklist?.checkEmail(v);
+                              },
                             ),
                             const SizedBox(height: 16),
                             TextFormField(

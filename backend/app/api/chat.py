@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_match_for_user
+from app.core.blacklist import is_chat_blocked
 from app.core.database import get_db
 from app.models.user import User
 from app.models.message import Message
@@ -30,6 +31,8 @@ def send_message(
     db: Session = Depends(get_db),
 ):
     get_match_for_user(match_id, current_user, db)
+    if is_chat_blocked(payload.content):
+        raise HTTPException(status_code=400, detail="Diese Nachricht enthält unerlaubte Inhalte.")
     msg = Message(match_id=match_id, sender_id=current_user.id, content=payload.content)
     db.add(msg)
     db.commit()

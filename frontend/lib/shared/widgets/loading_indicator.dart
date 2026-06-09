@@ -13,7 +13,7 @@ class LoadingIndicator extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircularProgressIndicator(
+          CircularProgressIndicator(
             color: AppColors.primary,
             strokeWidth: 3,
           ),

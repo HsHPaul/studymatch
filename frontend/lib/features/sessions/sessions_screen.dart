@@ -2,11 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/time_picker_utils.dart';
 import '../../shared/models/match.dart';
 import '../../shared/models/room.dart';
 import '../../shared/models/study_session.dart';
 import '../../shared/widgets/loading_indicator.dart';
+import '../../core/blacklist_service.dart';
+import '../../shared/models/notification.dart';
 import '../matching/matching_provider.dart';
+import '../notifications/notifications_provider.dart';
+import '../profile/profile_provider.dart';
 import 'sessions_provider.dart';
 
 class SessionsScreen extends ConsumerStatefulWidget {
@@ -16,18 +21,76 @@ class SessionsScreen extends ConsumerStatefulWidget {
   ConsumerState<SessionsScreen> createState() => _SessionsScreenState();
 }
 
+// Normalise a date to midnight so Map lookups work regardless of time component.
+DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+Map<DateTime, Color> _buildMarkedDays(
+    List<StudySession> sessions, List<AppNotification> notifications) {
+  final map = <DateTime, Color>{};
+
+  // Sessions: green (confirmed) or yellow (pending edit).
+  for (final s in sessions) {
+    if (s.status == 'abgesagt') continue;
+    final key = _dateOnly(s.dateTime);
+    final color = s.hasPendingEdit ? AppColors.warning : AppColors.success;
+    // Priority: yellow > green
+    if (!map.containsKey(key) || map[key] == AppColors.success) {
+      map[key] = color;
+    }
+  }
+
+  // Unread cancellation notifications → red, overrides everything.
+  final dateRe = RegExp(r'(\d{2})\.(\d{2})\.(\d{4})');
+  for (final n in notifications) {
+    if (n.isRead || n.title != 'Termin abgesagt') continue;
+    final match = dateRe.firstMatch(n.body);
+    if (match == null) continue;
+    final day = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final year = int.parse(match.group(3)!);
+    map[DateTime(year, month, day)] = AppColors.error;
+  }
+
+  return map;
+}
+
+enum _GroupOrder { bevorstehend, vergangen, angefragt }
+
 class _SessionsScreenState extends ConsumerState<SessionsScreen> {
   DateTime _selectedDay = DateTime.now();
+  _GroupOrder _sortOrder = _GroupOrder.bevorstehend;
+  DateTime? _filterDay;
+
+  static const _sortLabels = {
+    _GroupOrder.bevorstehend: 'Bevorstehend zuerst',
+    _GroupOrder.vergangen: 'Vergangen zuerst',
+    _GroupOrder.angefragt: 'Angefragt zuerst',
+  };
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(sessionsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Meine Termine'),
         actions: [
+          DropdownButtonHideUnderline(
+            child: DropdownButton<_GroupOrder>(
+              value: _sortOrder,
+              icon: const Icon(Icons.sort_rounded),
+              items: _GroupOrder.values
+                  .map((o) => DropdownMenuItem(
+                        value: o,
+                        child: Text(_sortLabels[o]!,
+                            style: const TextStyle(fontSize: 14)),
+                      ))
+                  .toList(),
+              onChanged: (o) {
+                if (o != null) setState(() => _sortOrder = o);
+              },
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () => ref.read(sessionsProvider.notifier).load(),
@@ -39,9 +102,35 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
           // ── Mini Calendar ──────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: _MiniCalendar(
-              selectedDay: _selectedDay,
-              onDaySelected: (d) => setState(() => _selectedDay = d),
+            child: Column(
+              children: [
+                Builder(builder: (context) {
+                  final markedDays = _buildMarkedDays(state.sessions,
+                      ref.watch(notificationsProvider).notifications);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _MiniCalendar(
+                        selectedDay: _selectedDay,
+                        onDaySelected: (d) {
+                          final key = _dateOnly(d);
+                          setState(() {
+                            _selectedDay = d;
+                            if (markedDays.containsKey(key)) {
+                              _filterDay = key;
+                            }
+                          });
+                        },
+                        markedDays: markedDays,
+                        filterDay: _filterDay,
+                        onClearFilter: () => setState(() => _filterDay = null),
+                      ),
+                      const SizedBox(height: 8),
+                      _CalendarLegend(),
+                    ],
+                  );
+                }),
+              ],
             ),
           ),
           const SizedBox(height: 16),
@@ -62,7 +151,16 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
                             ref.read(sessionsProvider.notifier).load(),
                         child: state.sessions.isEmpty
                             ? _EmptyState()
-                            : _SessionList(sessions: state.sessions),
+                            : _SessionList(
+                                sessions: _filterDay == null
+                                    ? state.sessions
+                                    : state.sessions
+                                        .where((s) =>
+                                            _dateOnly(s.dateTime) == _filterDay)
+                                        .toList(),
+                                sortOrder: _sortOrder,
+                                filterDay: _filterDay,
+                              ),
                       ),
           ),
         ],
@@ -77,7 +175,9 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
 
   void _showCreateDialog(BuildContext context, WidgetRef ref) {
     final matchesState = ref.read(matchesProvider);
-    final matches = matchesState.asData?.value ?? [];
+    final matches = (matchesState.asData?.value ?? [])
+        .where((m) => m.isAccepted)
+        .toList();
 
     showModalBottomSheet<void>(
       context: context,
@@ -88,12 +188,14 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
           required String matchId,
           required DateTime datum,
           required TimeOfDay uhrzeit,
+          TimeOfDay? uhrzeitEnde,
           String? raumId,
         }) async {
           final ok = await ref.read(sessionsProvider.notifier).createSession(
                 matchId: matchId,
                 datum: datum,
                 uhrzeit: uhrzeit,
+                uhrzeitEnde: uhrzeitEnde,
                 raumId: raumId,
               );
           if (ok && context.mounted) {
@@ -112,10 +214,16 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
 class _MiniCalendar extends StatelessWidget {
   final DateTime selectedDay;
   final ValueChanged<DateTime> onDaySelected;
+  final Map<DateTime, Color> markedDays;
+  final DateTime? filterDay;
+  final VoidCallback? onClearFilter;
 
   const _MiniCalendar({
     required this.selectedDay,
     required this.onDaySelected,
+    this.markedDays = const {},
+    this.filterDay,
+    this.onClearFilter,
   });
 
   static const _dayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -161,7 +269,23 @@ class _MiniCalendar extends StatelessWidget {
                 '${_monthNames[month]} $year',
                 style: tt.titleMedium,
               ),
-              const Spacer(),
+              if (filterDay != null)
+                Expanded(
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: onClearFilter,
+                      child: Text(
+                        'Alle Termine wieder anzeigen',
+                        style: tt.bodySmall?.copyWith(
+                          color: AppColors.primary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                const Spacer(),
               _NavButton(
                 icon: Icons.chevron_left_rounded,
                 onTap: () {
@@ -215,31 +339,39 @@ class _MiniCalendar extends StatelessWidget {
                   date.month == selectedDay.month &&
                   date.day == selectedDay.day;
 
+              final markColor = markedDays[_dateOnly(date)];
+              final bgColor = isSelected
+                  ? AppColors.primary
+                  : markColor != null
+                      ? markColor
+                      : isToday
+                          ? AppColors.primaryLight
+                          : Colors.transparent;
+              final textColor = isSelected || markColor != null
+                  ? Colors.white
+                  : isToday
+                      ? AppColors.primary
+                      : AppColors.navy;
               return GestureDetector(
                 onTap: () => onDaySelected(date),
-                child: Container(
-                  margin: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.primary
-                        : isToday
-                            ? AppColors.primaryLight
-                            : Colors.transparent,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    '$day',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: isSelected || isToday
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                      color: isSelected
-                          ? Colors.white
-                          : isToday
-                              ? AppColors.primary
-                              : AppColors.navy,
+                child: Center(
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$day',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isSelected || isToday || markColor != null
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                        color: textColor,
+                      ),
                     ),
                   ),
                 ),
@@ -270,6 +402,51 @@ class _MiniCalendar extends StatelessWidget {
     return '${weekdays[d.weekday]}, ${d.day}. ${_monthNames[d.month]} ${d.year}';
   }
 }
+
+// ── Calendar Legend ───────────────────────────────────────────────────────────
+
+class _CalendarLegend extends StatelessWidget {
+  const _CalendarLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context)
+        .textTheme
+        .labelSmall
+        ?.copyWith(color: AppColors.navy);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _LegendDot(color: AppColors.success),
+        const SizedBox(width: 4),
+        Text('Termin', style: style),
+        const SizedBox(width: 16),
+        _LegendDot(color: AppColors.warning),
+        const SizedBox(width: 4),
+        Text('Änderung offen', style: style),
+        const SizedBox(width: 16),
+        _LegendDot(color: AppColors.error),
+        const SizedBox(width: 4),
+        Text('Abgesagt', style: style),
+      ],
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  const _LegendDot({required this.color});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      );
+}
+
+// ── Nav Button ────────────────────────────────────────────────────────────────
 
 class _NavButton extends StatelessWidget {
   final IconData icon;
@@ -309,7 +486,7 @@ class _EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(
+              SizedBox(
                 width: 88,
                 height: 88,
                 child: DecoratedBox(
@@ -346,29 +523,86 @@ class _EmptyState extends StatelessWidget {
 
 class _SessionList extends StatelessWidget {
   final List<StudySession> sessions;
+  final _GroupOrder sortOrder;
+  final DateTime? filterDay;
 
-  const _SessionList({required this.sessions});
+  const _SessionList({
+    required this.sessions,
+    required this.sortOrder,
+    this.filterDay,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final upcoming = sessions.where((s) => s.isUpcoming).toList();
-    final past = sessions.where((s) => !s.isUpcoming).toList();
+    final requested = sessions.where((s) => s.isRequested).toList();
+    final upcoming =
+        sessions.where((s) => !s.isRequested && s.isUpcoming).toList();
+    final past =
+        sessions.where((s) => !s.isRequested && !s.isUpcoming).toList();
+
+    List<({String title, List<StudySession> items, bool isPast})> groups = [
+      (title: 'Bevorstehend', items: upcoming, isPast: false),
+      (title: 'Vergangen', items: past, isPast: true),
+      (title: 'Angefragt', items: requested, isPast: false),
+    ];
+
+    groups.sort((a, b) {
+      int rank(_GroupOrder o, String title) {
+        if (o == _GroupOrder.bevorstehend) {
+          return title == 'Bevorstehend'
+              ? 0
+              : title == 'Angefragt'
+                  ? 1
+                  : 2;
+        } else if (o == _GroupOrder.vergangen) {
+          return title == 'Vergangen'
+              ? 0
+              : title == 'Bevorstehend'
+                  ? 1
+                  : 2;
+        } else {
+          return title == 'Angefragt'
+              ? 0
+              : title == 'Bevorstehend'
+                  ? 1
+                  : 2;
+        }
+      }
+
+      return rank(sortOrder, a.title).compareTo(rank(sortOrder, b.title));
+    });
+
+    final items = <Widget>[];
+    for (final g in groups) {
+      if (g.items.isEmpty) continue;
+      if (items.isNotEmpty) items.add(const SizedBox(height: 16));
+      items.add(_GroupHeader(title: g.title));
+      items.add(const SizedBox(height: 8));
+      for (final s in g.items) {
+        items.add(_SessionCard(session: s, isPast: g.isPast));
+      }
+    }
+
+    if (items.isEmpty && filterDay != null) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          Center(
+            child: Text(
+              'Keine Termine an diesem Tag.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: AppColors.muted),
+            ),
+          ),
+        ],
+      );
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      children: [
-        if (upcoming.isNotEmpty) ...[
-          const _GroupHeader(title: 'Bevorstehend'),
-          const SizedBox(height: 8),
-          ...upcoming.map((s) => _SessionCard(session: s, isPast: false)),
-        ],
-        if (past.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          const _GroupHeader(title: 'Vergangen'),
-          const SizedBox(height: 8),
-          ...past.map((s) => _SessionCard(session: s, isPast: true)),
-        ],
-      ],
+      children: items,
     );
   }
 }
@@ -397,17 +631,26 @@ class _SessionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final dt = session.dateTime;
     final tt = Theme.of(context).textTheme;
-    final hasPending = session.hasPendingEdit && !session.iProposedEdit;
+    final hasPendingIncoming = session.hasPendingEdit && !session.iProposedEdit;
+    final hasPendingOutgoing = session.hasPendingEdit && session.iProposedEdit;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    Color cardColor = isPast
+        ? (isDark ? const Color(0xFF2A2A2E) : const Color(0xFFF5F3FF))
+        : AppColors.cardWhite;
+    if (hasPendingOutgoing) cardColor = AppColors.primaryLight;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
         decoration: BoxDecoration(
-          color: isPast ? const Color(0xFFF5F3FF) : AppColors.cardWhite,
+          color: cardColor,
           borderRadius: BorderRadius.circular(16),
-          border: hasPending
+          border: hasPendingIncoming
               ? Border.all(color: AppColors.warning, width: 1.5)
-              : null,
+              : hasPendingOutgoing
+                  ? Border.all(color: AppColors.primary, width: 1.5)
+                  : null,
           boxShadow: isPast
               ? null
               : const [BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, 2))],
@@ -442,14 +685,14 @@ class _SessionCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${_weekday(dt.weekday)}, ${_fmt2(dt.hour)}:${_fmt2(dt.minute)} Uhr',
+                    _timeRange(dt, session.uhrzeitEnde),
                     style: tt.bodySmall?.copyWith(color: isPast ? AppColors.muted : AppColors.navy),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       _StatusChip(status: session.status),
-                      if (hasPending) ...[
+                      if (hasPendingIncoming) ...[
                         const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -459,6 +702,25 @@ class _SessionCard extends StatelessWidget {
                           ),
                           child: const Text('Änderung angefragt',
                               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning)),
+                        ),
+                      ],
+                      if (hasPendingOutgoing) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.hourglass_empty_rounded, size: 10, color: AppColors.primary),
+                              const SizedBox(width: 4),
+                              Text('Ausstehend',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                            ],
+                          ),
                         ),
                       ],
                     ],
@@ -483,6 +745,12 @@ class _SessionCard extends StatelessWidget {
   }
 
   String _fmt2(int n) => n.toString().padLeft(2, '0');
+
+  String _timeRange(DateTime dt, String? ende) {
+    final start = '${_fmt2(dt.hour)}:${_fmt2(dt.minute)}';
+    if (ende == null || ende.length < 5) return '${_weekday(dt.weekday)}, $start Uhr';
+    return '${_weekday(dt.weekday)}, $start – ${ende.substring(0, 5)} Uhr';
+  }
 
   String _monthAbbr(int m) {
     const months = [
@@ -512,12 +780,18 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
   bool _editing = false;
   late DateTime _newDate;
   late TimeOfDay _newTime;
+  TimeOfDay? _newTimeEnde;
 
   @override
   void initState() {
     super.initState();
     _newDate = widget.session.dateTime;
     _newTime = TimeOfDay(hour: widget.session.dateTime.hour, minute: widget.session.dateTime.minute);
+    final ende = widget.session.uhrzeitEnde;
+    if (ende != null && ende.length >= 5) {
+      final parts = ende.split(':');
+      _newTimeEnde = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+    }
   }
 
   String _fmtDate(String d) {
@@ -533,12 +807,87 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
   String _fmtTimeTod(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+  Future<void> _showCancelDialog(BuildContext context, String sessionId) async {
+    final reasonCtrl = TextEditingController();
+    String? validationError;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Termin absagen'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Möchtest du diesen Termin wirklich absagen?'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonCtrl,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Grund (optional)',
+                  hintText: 'z. B. Ich kann leider nicht…',
+                  errorText: validationError,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onChanged: (_) {
+                  if (validationError != null) {
+                    setDialogState(() => validationError = null);
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Zurück'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+              onPressed: () async {
+                final reason = reasonCtrl.text.trim().isEmpty ? null : reasonCtrl.text.trim();
+                if (reason != null) {
+                  final blacklist = await ref.read(blacklistProvider.future);
+                  final err = blacklist.checkChat(reason);
+                  if (err != null) {
+                    setDialogState(() => validationError = err);
+                    return;
+                  }
+                }
+                if (!ctx.mounted) return;
+                Navigator.of(ctx).pop();
+                final ok = await ref
+                    .read(sessionsProvider.notifier)
+                    .cancelSession(sessionId, reason: reason);
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(ok ? 'Termin abgesagt.' : 'Fehler beim Absagen.'),
+                  ));
+                }
+              },
+              child: const Text('Absagen'),
+            ),
+          ],
+        ),
+      ),
+    );
+    reasonCtrl.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.session;
     final tt = Theme.of(context).textTheme;
+    final isPast = !s.isUpcoming;
     final canEdit = (s.status == 'geplant' || s.status == 'bestaetigt') && !s.hasPendingEdit;
     final isIncomingEdit = s.hasPendingEdit && !s.iProposedEdit;
+    final currentUserId = ref.read(profileProvider).profile?.id;
+    final isIncomingRequest = s.isRequested && s.createdById != null && s.createdById != currentUserId;
+    final canCancel = (s.status == 'geplant' || s.status == 'bestaetigt');
 
     return Padding(
       padding: EdgeInsets.only(
@@ -576,9 +925,90 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
           // Aktuelle Daten
           _InfoRow(icon: Icons.calendar_today_rounded, label: _fmtDate(s.datum)),
           const SizedBox(height: 8),
-          _InfoRow(icon: Icons.access_time_rounded, label: '${_fmtTime(s.uhrzeit)} Uhr'),
+          _InfoRow(
+            icon: Icons.access_time_rounded,
+            label: s.uhrzeitEnde != null
+                ? '${_fmtTime(s.uhrzeit)} – ${_fmtTime(s.uhrzeitEnde!)} Uhr'
+                : '${_fmtTime(s.uhrzeit)} Uhr',
+          ),
           const SizedBox(height: 8),
           _StatusChip(status: s.status),
+
+          // Eingehende Terminanfrage
+          if (isIncomingRequest) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.warning, width: 1),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.schedule_rounded, size: 16, color: AppColors.warning),
+                      SizedBox(width: 8),
+                      Text('Terminanfrage',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.warning,
+                              fontSize: 13)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${s.partnerAlias} möchte einen Termin mit dir vereinbaren.',
+                    style: tt.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.error),
+                          onPressed: () async {
+                            final ok = await ref
+                                .read(sessionsProvider.notifier)
+                                .declineSession(s.id);
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(ok
+                                      ? 'Terminanfrage abgelehnt.'
+                                      : 'Fehler beim Ablehnen.')));
+                            }
+                          },
+                          child: const Text('Ablehnen'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () async {
+                            final ok = await ref
+                                .read(sessionsProvider.notifier)
+                                .acceptSession(s.id);
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(ok
+                                      ? 'Termin angenommen!'
+                                      : 'Fehler beim Annehmen.')));
+                            }
+                          },
+                          child: const Text('Annehmen'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           // Eingehende Änderungsanfrage
           if (isIncomingEdit) ...[
@@ -603,7 +1033,12 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                   ),
                   const SizedBox(height: 8),
                   Text('Neues Datum: ${_fmtDate(s.proposedDatum!)}', style: tt.bodySmall),
-                  Text('Neue Uhrzeit: ${_fmtTime(s.proposedUhrzeit!)} Uhr', style: tt.bodySmall),
+                  Text(
+                    s.proposedUhrzeitEnde != null
+                        ? 'Neue Uhrzeit: ${_fmtTime(s.proposedUhrzeit!)} – ${_fmtTime(s.proposedUhrzeitEnde!)} Uhr'
+                        : 'Neue Uhrzeit: ${_fmtTime(s.proposedUhrzeit!)} Uhr',
+                    style: tt.bodySmall,
+                  ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -653,7 +1088,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.hourglass_empty_rounded, size: 16, color: AppColors.primary),
+                  Icon(Icons.hourglass_empty_rounded, size: 16, color: AppColors.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -689,14 +1124,29 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.access_time_rounded, size: 16),
-                    label: Text(_fmtTimeTod(_newTime)),
+                    label: Text('Von: ${_fmtTimeTod(_newTime)}'),
                     onPressed: () async {
-                      final t = await showTimePicker(context: context, initialTime: _newTime);
+                      final t = await showTimePicker24h(context, initialTime: _newTime);
                       if (t != null) setState(() => _newTime = t);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.access_time_filled_rounded, size: 16),
+                    label: Text(_newTimeEnde != null ? 'Bis: ${_fmtTimeTod(_newTimeEnde!)}' : 'Bis: –'),
+                    onPressed: () async {
+                      final t = await showTimePicker24h(context, initialTime: _newTimeEnde ?? _newTime);
+                      if (t != null) setState(() => _newTimeEnde = t);
                     },
                   ),
                 ),
@@ -709,6 +1159,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                   sessionId: s.id,
                   datum: _newDate,
                   uhrzeit: _newTime,
+                  uhrzeitEnde: _newTimeEnde,
                 );
                 if (context.mounted) {
                   Navigator.of(context).pop();
@@ -718,6 +1169,48 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                 }
               },
               child: const Text('Änderung anfragen'),
+            ),
+          ],
+          if (canCancel) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+              ),
+              icon: const Icon(Icons.cancel_outlined, size: 18),
+              label: const Text('Termin absagen'),
+              onPressed: () => _showCancelDialog(context, s.id),
+            ),
+          ],
+          if (isPast) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('Termin löschen'),
+              onPressed: () async {
+                final ok = await ref
+                    .read(sessionsProvider.notifier)
+                    .deleteSession(s.id);
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(ok
+                          ? 'Termin gelöscht.'
+                          : 'Fehler beim Löschen.'),
+                    ),
+                  );
+                }
+              },
             ),
           ],
           const SizedBox(height: 8),
@@ -754,6 +1247,7 @@ class _StatusChip extends StatelessWidget {
     final (label, color) = switch (status) {
       'bestaetigt' => ('Bestätigt', AppColors.success),
       'abgesagt' => ('Abgesagt', AppColors.error),
+      'angefragt' => ('Angefragt', AppColors.warning),
       _ => ('Geplant', AppColors.primary),
     };
 
@@ -781,6 +1275,7 @@ typedef _CreateCallback = Future<void> Function({
   required String matchId,
   required DateTime datum,
   required TimeOfDay uhrzeit,
+  TimeOfDay? uhrzeitEnde,
   String? raumId,
 });
 
@@ -802,6 +1297,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
   Match? _selectedMatch;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   TimeOfDay _selectedTime = const TimeOfDay(hour: 10, minute: 0);
+  TimeOfDay? _selectedTimeEnde;
   Room? _selectedRoom;
   bool _saving = false;
 
@@ -823,6 +1319,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
       matchId: _selectedMatch!.matchId,
       datum: _selectedDate,
       uhrzeit: _selectedTime,
+      uhrzeitEnde: _selectedTimeEnde,
       raumId: _selectedRoom?.id,
     );
     if (mounted) {
@@ -880,7 +1377,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
                 color: AppColors.primaryLight,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   Icon(Icons.info_outline_rounded,
                       size: 18, color: AppColors.primary),
@@ -937,13 +1434,21 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.access_time_rounded, size: 18),
-                  label: Text(_fmtTime(_selectedTime)),
+                  label: Text('Von: ${_fmtTime(_selectedTime)}'),
                   onPressed: () async {
-                    final t = await showTimePicker(
-                      context: context,
-                      initialTime: _selectedTime,
-                    );
+                    final t = await showTimePicker24h(context, initialTime: _selectedTime);
                     if (t != null) setState(() => _selectedTime = t);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.access_time_filled_rounded, size: 18),
+                  label: Text(_selectedTimeEnde != null ? 'Bis: ${_fmtTime(_selectedTimeEnde!)}' : 'Bis: –'),
+                  onPressed: () async {
+                    final t = await showTimePicker24h(context, initialTime: _selectedTimeEnde ?? _selectedTime);
+                    if (t != null) setState(() => _selectedTimeEnde = t);
                   },
                 ),
               ),
@@ -953,7 +1458,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
 
           // ── Raum ───────────────────────────────────────────────────────
           rooms.when(
-            loading: () => const LinearProgressIndicator(
+            loading: () => LinearProgressIndicator(
               color: AppColors.primary,
             ),
             error: (_, __) => const SizedBox.shrink(),

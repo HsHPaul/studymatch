@@ -65,10 +65,37 @@ class SessionsNotifier extends StateNotifier<SessionsState> {
   Future<bool> acceptEdit(String sessionId) => _updateSessionStatus(sessionId, 'accept-edit');
   Future<bool> declineEdit(String sessionId) => _updateSessionStatus(sessionId, 'decline-edit');
 
+  Future<bool> cancelSession(String sessionId, {String? reason}) async {
+    try {
+      final dio = _ref.read(dioProvider);
+      await dio.post('/sessions/$sessionId/cancel', data: {'reason': reason});
+      if (!mounted) return false;
+      await load();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteSession(String sessionId) async {
+    try {
+      final dio = _ref.read(dioProvider);
+      await dio.delete('/sessions/$sessionId');
+      if (!mounted) return false;
+      state = state.copyWith(
+        sessions: state.sessions.where((s) => s.id != sessionId).toList(),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> proposeEdit({
     required String sessionId,
     required DateTime datum,
     required TimeOfDay uhrzeit,
+    TimeOfDay? uhrzeitEnde,
     String? raumId,
   }) async {
     try {
@@ -76,6 +103,7 @@ class SessionsNotifier extends StateNotifier<SessionsState> {
       await dio.patch('/sessions/$sessionId/propose-edit', data: {
         'datum': _fmtDate(datum),
         'uhrzeit': _fmtTime(uhrzeit),
+        if (uhrzeitEnde != null) 'uhrzeit_ende': _fmtTime(uhrzeitEnde),
         if (raumId != null) 'raum_id': raumId,
       });
       if (!mounted) return false;
@@ -102,6 +130,7 @@ class SessionsNotifier extends StateNotifier<SessionsState> {
     required String matchId,
     required DateTime datum,
     required TimeOfDay uhrzeit,
+    TimeOfDay? uhrzeitEnde,
     String? raumId,
   }) async {
     state = state.copyWith(isSaving: true, clearError: true);
@@ -111,6 +140,7 @@ class SessionsNotifier extends StateNotifier<SessionsState> {
         'match_id': matchId,
         'datum': _fmtDate(datum),
         'uhrzeit': _fmtTime(uhrzeit),
+        if (uhrzeitEnde != null) 'uhrzeit_ende': _fmtTime(uhrzeitEnde),
         if (raumId != null) 'raum_id': raumId,
       };
       await dio.post('/sessions', data: data);

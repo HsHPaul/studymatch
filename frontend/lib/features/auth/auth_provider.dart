@@ -4,8 +4,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../core/api_client.dart';
 import '../../features/matching/matching_provider.dart';
+import '../../features/notifications/notifications_provider.dart';
 import '../../features/profile/profile_provider.dart';
 import '../../features/sessions/sessions_provider.dart';
+
+final pendingChatPolicyProvider = StateProvider<bool>((ref) => false);
 
 class AuthState {
   final String? token;
@@ -55,6 +58,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.invalidate(sessionsProvider);
     _ref.invalidate(allSubjectsProvider);
     _ref.invalidate(roomsProvider);
+    _ref.invalidate(notificationsProvider);
   }
 
   Future<void> _loadToken() async {

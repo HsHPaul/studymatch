@@ -31,6 +31,12 @@ class AvailabilityCreate(BaseModel):
         return v
 
 
+class AvailabilityUpdate(BaseModel):
+    wochentag: Wochentag | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+
+
 class AvailabilityResponse(OrmBase):
     id: UUID
     wochentag: Wochentag

@@ -19,12 +19,10 @@ class MatchDetailScreen extends ConsumerWidget {
     final state = ref.watch(matchesProvider);
 
     return state.when(
-      loading: () => const Scaffold(
-        backgroundColor: AppColors.background,
-        body: LoadingIndicator(),
+      loading: () => Scaffold(
+        body: const LoadingIndicator(),
       ),
       error: (e, _) => Scaffold(
-        backgroundColor: AppColors.background,
         appBar: AppBar(),
         body: const ErrorView(message: 'Match nicht gefunden.'),
       ),
@@ -32,8 +30,7 @@ class MatchDetailScreen extends ConsumerWidget {
         final match = matches.where((m) => m.userId == matchId).firstOrNull;
         if (match == null) {
           return Scaffold(
-            backgroundColor: AppColors.background,
-            appBar: AppBar(),
+                appBar: AppBar(),
             body: const ErrorView(message: 'Match nicht gefunden.'),
           );
         }
@@ -53,7 +50,6 @@ class _MatchDetailView extends ConsumerWidget {
     final tt = Theme.of(context).textTheme;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(match.alias),
       ),
@@ -143,11 +139,11 @@ class _MatchDetailView extends ConsumerWidget {
                   leading: Container(
                     width: 40,
                     height: 40,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.primaryLight,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.psychology_outlined,
                       color: AppColors.primary,
                       size: 20,
@@ -186,7 +182,7 @@ class _MatchDetailView extends ConsumerWidget {
                     ),
                     child: ListTile(
                       dense: true,
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.access_time_rounded,
                         size: 20,
                         color: AppColors.primary,

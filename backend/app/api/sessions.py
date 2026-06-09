@@ -3,12 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, get_match_for_user
+from app.core.blacklist import is_chat_blocked
 from app.core.database import get_db
 from app.models.enums import MatchStatus, SessionStatus
+from app.models.notification import Notification
 from app.models.user import User
 from app.models.match import Match
 from app.models.study_session import StudySession
-from app.schemas.session import StudySessionCreate, SessionEditPropose, StudySessionResponse
+from app.schemas.session import StudySessionCreate, SessionEditPropose, SessionCancel, StudySessionResponse
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -22,12 +24,14 @@ def _with_partner(session: StudySession, current_user_id: UUID, db: Session) -> 
         'match_id': session.match_id,
         'datum': session.datum,
         'uhrzeit': session.uhrzeit,
+        'uhrzeit_ende': session.uhrzeit_ende,
         'status': session.status,
         'raum_id': session.raum_id,
         'partner_alias': partner.alias if partner else 'Unbekannt',
         'created_by_id': session.created_by_id,
         'proposed_datum': session.proposed_datum,
         'proposed_uhrzeit': session.proposed_uhrzeit,
+        'proposed_uhrzeit_ende': session.proposed_uhrzeit_ende,
         'proposed_raum_id': session.proposed_raum_id,
         'edit_proposed_by_id': session.edit_proposed_by_id,
         'i_proposed_edit': session.edit_proposed_by_id == current_user_id,
@@ -74,7 +78,7 @@ def get_sessions(
         db.query(StudySession)
         .filter(
             StudySession.match_id.in_(my_match_ids),
-            StudySession.status.in_([SessionStatus.geplant, SessionStatus.bestaetigt]),
+            StudySession.status.in_([SessionStatus.angefragt, SessionStatus.geplant, SessionStatus.bestaetigt]),
         )
         .options(joinedload(StudySession.match))
         .all()
@@ -146,6 +150,7 @@ def propose_edit(
         raise HTTPException(status_code=400, detail="Es gibt bereits eine offene Änderungsanfrage")
     session.proposed_datum = payload.datum
     session.proposed_uhrzeit = payload.uhrzeit
+    session.proposed_uhrzeit_ende = payload.uhrzeit_ende
     session.proposed_raum_id = payload.raum_id
     session.edit_proposed_by_id = current_user.id
     db.commit()
@@ -166,14 +171,54 @@ def accept_edit(
         raise HTTPException(status_code=400, detail="Du kannst deine eigene Änderung nicht bestätigen")
     session.datum = session.proposed_datum
     session.uhrzeit = session.proposed_uhrzeit
+    session.uhrzeit_ende = session.proposed_uhrzeit_ende
     session.raum_id = session.proposed_raum_id
     session.proposed_datum = None
     session.proposed_uhrzeit = None
+    session.proposed_uhrzeit_ende = None
     session.proposed_raum_id = None
     session.edit_proposed_by_id = None
     db.commit()
     db.refresh(session)
     return _with_partner(session, current_user.id, db)
+
+
+@router.post("/{session_id}/cancel", status_code=status.HTTP_204_NO_CONTENT)
+def cancel_session(
+    session_id: UUID,
+    payload: SessionCancel,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = _get_my_session(session_id, current_user, db)
+    if session.status not in (SessionStatus.geplant, SessionStatus.bestaetigt):
+        raise HTTPException(status_code=400, detail="Nur bestätigte Termine können abgesagt werden")
+    if payload.reason and is_chat_blocked(payload.reason):
+        raise HTTPException(status_code=400, detail="Grund enthält verbotene Inhalte")
+
+    session.status = SessionStatus.abgesagt
+    session.cancellation_reason = payload.reason
+
+    match = session.match or db.query(Match).filter(Match.id == session.match_id).first()
+    partner_id = match.user_b_id if match.user_a_id == current_user.id else match.user_a_id
+
+    body = f"{current_user.alias} hat den Termin am {session.datum.strftime('%d.%m.%Y')} abgesagt."
+    if payload.reason:
+        body += f"\nGrund: {payload.reason}"
+
+    db.add(Notification(user_id=partner_id, title="Termin abgesagt", body=body))
+    db.commit()
+
+
+@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_session(
+    session_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    session = _get_my_session(session_id, current_user, db)
+    db.delete(session)
+    db.commit()
 
 
 @router.post("/{session_id}/decline-edit", status_code=status.HTTP_204_NO_CONTENT)

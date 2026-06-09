@@ -11,11 +11,12 @@ Studierende legen ein Profil an, geben Fach, Lernstil und Verfügbarkeit an, sch
 
 Dieses Projekt ist eine mobile App mit folgendem Stack:
 
-- **Frontend:** Flutter (Dart) — vollständig implementiert inkl. eigenem Designsystem
+- **Frontend:** Flutter (Dart) — vollständig implementiert inkl. eigenem Designsystem, Dark/Light-Mode
 - **Backend:** Python 3.11+, FastAPI — vollständig implementiert
 - **Datenbank:** PostgreSQL via **Supabase** (Produktion) + Docker lokal
 - **Auth:** JWT (python-jose + bcrypt direkt — kein passlib)
 - **Chat:** WebSockets (FastAPI), REST-Fallback vorhanden
+- **Blacklist:** `blacklist.json` (server- und clientseitig) für Chat-Nachrichten und E-Mail-Adressen
 - **Projektmanagement:** Jira + GitLab (GWDG)
 
 ### Architektur (Backend)
@@ -34,18 +35,21 @@ backend/
 ### Architektur (Frontend)
 ```
 frontend/lib/
-├── main.dart             → App-Einstiegspunkt (ProviderScope)
+├── main.dart                  → App-Einstiegspunkt (ProviderScope, Theme-Bindung)
 ├── core/
-│   ├── app_colors.dart   → Zentrale Farbkonstanten (AppColors)
-│   ├── api_client.dart   → Dio + JWT-Interceptor + 401-Logout
-│   ├── router.dart       → GoRouter (Auth-Guard, ShellRoute, _StyledNavBar)
-│   └── theme.dart        → Material 3 Theme (vollständiges Designsystem)
+│   ├── app_colors.dart        → Dynamische Farben (Light/Dark), statische Getter
+│   ├── api_client.dart        → Dio + JWT-Interceptor + 401-Logout
+│   ├── router.dart            → GoRouter (Auth-Guard, ShellRoute, direktionale Tab-Animationen)
+│   ├── theme.dart             → Material 3 Theme (Light + Dark)
+│   ├── theme_provider.dart    → Dark-Mode-Toggle, Persistenz via flutter_secure_storage
+│   ├── time_picker_utils.dart → showTimePicker24h() mit deutschen Labels
+│   └── blacklist_service.dart → Clientseitige Blacklist-Prüfung
 ├── features/
 │   ├── auth/             → Login, Register, Passwort vergessen, AuthNotifier
-│   ├── profile/          → Profil bearbeiten, Fächer, Zeitfenster, Passwort ändern, Account löschen
-│   ├── matching/         → Vorschläge / Anfragen / Bestätigte Matches (3 Tabs), Detail-Ansicht
+│   ├── profile/          → Profil bearbeiten, Fächer, Zeitfenster (inkl. Bearbeiten), Dark-Mode-Toggle
+│   ├── matching/         → 3 Tabs: Angenommen (mit Filter) / Anfragen / Vorschläge (mit Filter)
 │   ├── chat/             → WebSocket + REST-Fallback, Chat-UI, Terminvorschlag aus Chat
-│   └── sessions/         → Lerntreffen-Liste, Mini-Kalender, Terminbearbeitung mit Bestätigung
+│   └── sessions/         → Lerntreffen, Mini-Kalender (Tages-Filter), Terminbearbeitung mit Bestätigung
 └── shared/
     ├── models/           → Dart-Modelle für alle Entities
     └── widgets/          → LoadingIndicator, ErrorView, StudyMatchLogo
@@ -68,9 +72,12 @@ Regelbasiert (kein ML). Pflicht: mind. 1 gemeinsames Fach + mind. 1 überlappend
 Scoring: Fach 45% | Lernstil 25% | Zeitüberlappung 20% | Studiengang 10%
 
 ### Match-Filter (Mindest-Score)
-Jeder User kann in seinem Profil einen Mindest-Match-Prozentsatz setzen (`min_match_score`, 0–90%).  
-Ein Vorschlag erscheint nur, wenn `score >= max(mein_minimum, ihr_minimum)` — beide Seiten müssen den Wert erfüllen.  
-Einstellbar über den "Anpassen"-Button im Vorschläge-Tab.
+Beide Match-Tabs ("Angenommen" und "Vorschläge") haben einen unabhängigen Score-Filter-Schieberegler (0–90%).
+
+- **Vorschläge-Tab:** Speichert `min_match_score` ins Backend-Profil. Ein Vorschlag erscheint nur, wenn `score >= max(mein_minimum, ihr_minimum)`.
+- **Angenommen-Tab:** Lokaler Filter (kein Backend-Save), filtert nur die clientseitige Anzeige.
+
+Beide Filter sind vollständig unabhängig voneinander.
 
 ### Bekannte Fixes / wichtige Hinweise
 - **bcrypt:** `passlib` durch direktes `bcrypt` ersetzt (`security.py`) — passlib 1.7.4 ist inkompatibel mit bcrypt 4.x
@@ -79,6 +86,9 @@ Einstellbar über den "Anpassen"-Button im Vorschläge-Tab.
 - **Alembic:** `alembic.ini` hat leeres `sqlalchemy.url` — URL kommt aus `.env` über `alembic/env.py`
 - **Provider-Reset:** `AuthNotifier._clearUserData()` invalidiert alle nutzerspezifischen Provider bei Login/Logout
 - **Auth-Hint-Fix:** `MatchListScreen` prüft Auth-State in Fehlerfall, triggert Reload via `ref.listen` wenn Auth bereit — verhindert falschen 401 beim App-Start
+- **AppColors nicht const:** `AppColors` verwendet dynamische Getter für Dark/Light-Mode — `const`-Konstruktoren dürfen keine `AppColors.*`-Werte als Argumente nutzen
+- **Dark-Mode-Persistenz:** `ThemeModeNotifier` speichert den Zustand via `flutter_secure_storage` (Key: `dark_mode`) — überlebt App-Neustarts
+- **Blacklist-Synchronisation:** `backend/blacklist.json` und `frontend/assets/blacklist.json` sind inhaltlich identisch und müssen manuell synchron gehalten werden
 
 ### API-Endpunkte (Überblick)
 
@@ -94,6 +104,7 @@ Einstellbar über den "Anpassen"-Button im Vorschläge-Tab.
 | POST | `/api/v1/profiles/me/subjects` | Fach hinzufügen |
 | DELETE | `/api/v1/profiles/me/subjects/{id}` | Fach entfernen |
 | POST | `/api/v1/profiles/me/availabilities` | Zeitfenster hinzufügen |
+| PATCH | `/api/v1/profiles/me/availabilities/{id}` | Zeitfenster bearbeiten |
 | DELETE | `/api/v1/profiles/me/availabilities/{id}` | Zeitfenster entfernen |
 | GET | `/api/v1/profiles/subjects` | Alle verfügbaren Fächer |
 | GET | `/api/v1/matches` | Vorschläge + bestätigte Matches (mit Status) |
@@ -201,7 +212,7 @@ matches (user_a, user_b, status, requested_by_id)
 
 ## MVP-Scope
 
-**Enthalten:** Registrierung, Profil, Fächer, Lernstil, Zeitfenster, Match-Anfragen, Chat, Terminvorschläge aus Chat, Terminbearbeitung mit Bestätigung, Passwort ändern/zurücksetzen, Account löschen  
+**Enthalten:** Registrierung, Profil, Fächer, Lernstil, Zeitfenster (inkl. Bearbeiten), Match-Anfragen, Score-Filter (unabhängig pro Tab), Chat, Terminvorschläge aus Chat, Terminbearbeitung mit Bestätigung, Passwort ändern/zurücksetzen, Account löschen, Dark/Light-Mode (persistent), Blacklist (Chat + E-Mail)  
 **Nicht im MVP:** E-Mail-Versand, Video-Call, Kalender-Sync, Hochschul-SSO, Gruppenmatching, Gamification
 
 ---

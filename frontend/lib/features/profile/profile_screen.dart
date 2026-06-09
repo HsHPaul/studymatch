@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/theme_provider.dart';
+import '../../core/time_picker_utils.dart';
 import '../../features/auth/auth_provider.dart';
+import '../../features/notifications/notifications_provider.dart';
+import '../../shared/models/notification.dart';
 import '../../shared/models/subject.dart';
 import '../../shared/models/user.dart';
 import '../../shared/widgets/loading_indicator.dart';
@@ -53,6 +57,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     _aliasCtrl = TextEditingController();
     _studiengangCtrl = TextEditingController();
     _bioCtrl = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(notificationsProvider.notifier).load();
+    });
   }
 
   @override
@@ -215,16 +222,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Mein Profil'),
         actions: [
-          if (!_editing)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => _startEditing(ps),
-              tooltip: 'Bearbeiten',
-            ),
+          _NotificationBell(),
+          Consumer(builder: (context, ref, _) {
+            final isDark = ref.watch(isDarkModeProvider);
+            return IconButton(
+              icon: Icon(isDark
+                  ? Icons.light_mode_outlined
+                  : Icons.dark_mode_outlined),
+              tooltip: isDark ? 'Heller Modus' : 'Dunkler Modus',
+              onPressed: () =>
+                  ref.read(isDarkModeProvider.notifier).toggle(),
+            );
+          }),
           IconButton(
             icon: const Icon(Icons.password_outlined),
             onPressed: _showChangePasswordDialog,
@@ -268,7 +280,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       onCancel: () => setState(() => _editing = false),
                       isSaving: ps.isSaving,
                     )
-                  : _ProfileInfo(profile: ps.profile!),
+                  : _ProfileInfo(
+                      profile: ps.profile!,
+                      onEdit: () => _startEditing(ps),
+                    ),
               const SizedBox(height: 20),
               _SubjectsSection(mySubjects: ps.mySubjects),
               const SizedBox(height: 20),
@@ -295,8 +310,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
 class _ProfileInfo extends StatelessWidget {
   final UserProfile profile;
+  final VoidCallback? onEdit;
 
-  const _ProfileInfo({required this.profile});
+  const _ProfileInfo({required this.profile, this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -336,7 +352,22 @@ class _ProfileInfo extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(profile.alias, style: tt.titleLarge),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(profile.alias, style: tt.titleLarge),
+                        ),
+                        if (onEdit != null)
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 20),
+                            color: AppColors.primary,
+                            tooltip: 'Bearbeiten',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            onPressed: onEdit,
+                          ),
+                      ],
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       profile.email,
@@ -529,13 +560,17 @@ class _SubjectsSection extends ConsumerWidget {
     final allSubjects = ref.watch(allSubjectsProvider);
     final tt = Theme.of(context).textTheme;
 
+    final atLimit = mySubjects.length >= 5;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionHeader(
           title: 'Meine Fächer',
           action: TextButton.icon(
-            onPressed: () => _showAddSubjectDialog(context, ref, allSubjects),
+            onPressed: atLimit
+                ? null
+                : () => _showAddSubjectDialog(context, ref, allSubjects),
             icon: const Icon(Icons.add_rounded, size: 18),
             label: const Text('Hinzufügen'),
           ),
@@ -586,6 +621,7 @@ class _SubjectsSection extends ConsumerWidget {
       context: context,
       builder: (_) => _SubjectPickerDialog(
         mySubjectIds: mySubjects.map((s) => s.id).toSet(),
+        mySubjectCount: mySubjects.length,
         allSubjects: allSubjects,
         onAdd: (id) => ref.read(profileProvider.notifier).addSubject(id),
       ),
@@ -595,46 +631,79 @@ class _SubjectsSection extends ConsumerWidget {
 
 class _SubjectPickerDialog extends StatelessWidget {
   final Set<String> mySubjectIds;
+  final int mySubjectCount;
   final AsyncValue<List<Subject>> allSubjects;
   final void Function(String id) onAdd;
 
   const _SubjectPickerDialog({
     required this.mySubjectIds,
+    required this.mySubjectCount,
     required this.allSubjects,
     required this.onAdd,
   });
 
   @override
   Widget build(BuildContext context) {
+    final atLimit = mySubjectCount >= 5;
     return AlertDialog(
-      title: const Text('Fach hinzufügen'),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Fach hinzufügen'),
+          const SizedBox(height: 4),
+          Text(
+            'max. 5 Fächer gleichzeitig ($mySubjectCount/5)',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: (Theme.of(context).textTheme.bodySmall?.fontSize ?? 12) + 2,
+                  color: atLimit
+                      ? Theme.of(context).colorScheme.error
+                      : Colors.grey[600],
+                ),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 320,
-        child: allSubjects.when(
-          loading: () => const LoadingIndicator(),
-          error: (e, _) => Text('Fehler: $e'),
-          data: (subjects) {
-            final available =
-                subjects.where((s) => !mySubjectIds.contains(s.id)).toList();
-            if (available.isEmpty) {
-              return const Text('Alle Fächer bereits hinzugefügt.');
-            }
-            return ListView.builder(
-              shrinkWrap: true,
-              itemCount: available.length,
-              itemBuilder: (context, i) {
-                final s = available[i];
-                return ListTile(
-                  title: Text(s.name),
-                  subtitle: s.kuerzel != null ? Text(s.kuerzel!) : null,
-                  onTap: () {
-                    onAdd(s.id);
-                    Navigator.of(context).pop();
-                  },
-                );
-              },
-            );
-          },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (atLimit)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Du hast bereits die maximale Anzahl an Fächern erreicht. Entferne zuerst ein Fach, um ein neues hinzuzufügen.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              )
+            else
+              allSubjects.when(
+                loading: () => const LoadingIndicator(),
+                error: (e, _) => Text('Fehler: $e'),
+                data: (subjects) {
+                  final available =
+                      subjects.where((s) => !mySubjectIds.contains(s.id)).toList();
+                  if (available.isEmpty) {
+                    return const Text('Alle Fächer bereits hinzugefügt.');
+                  }
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: available.length,
+                    itemBuilder: (context, i) {
+                      final s = available[i];
+                      return ListTile(
+                        title: Text(s.name),
+                        subtitle: s.kuerzel != null ? Text(s.kuerzel!) : null,
+                        onTap: () {
+                          onAdd(s.id);
+                          Navigator.of(context).pop();
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+          ],
         ),
       ),
       actions: [
@@ -715,7 +784,7 @@ class _AvailabilitySection extends ConsumerWidget {
                       color: AppColors.primaryLight,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.schedule_rounded,
                       color: AppColors.primary,
                       size: 20,
@@ -729,14 +798,28 @@ class _AvailabilitySection extends ConsumerWidget {
                     a.timeRange,
                     style: tt.bodySmall,
                   ),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.delete_outline_rounded,
-                      color: AppColors.muted,
-                    ),
-                    onPressed: () => ref
-                        .read(profileProvider.notifier)
-                        .removeAvailability(a.id),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          color: AppColors.muted,
+                        ),
+                        tooltip: 'Bearbeiten',
+                        onPressed: () => _showEditDialog(context, ref, a),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.delete_outline_rounded,
+                          color: AppColors.muted,
+                        ),
+                        tooltip: 'Löschen',
+                        onPressed: () => ref
+                            .read(profileProvider.notifier)
+                            .removeAvailability(a.id),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -747,21 +830,40 @@ class _AvailabilitySection extends ConsumerWidget {
   }
 
   Future<void> _showAddDialog(BuildContext context, WidgetRef ref) async {
-    String selectedTag = _wochentage[0];
-    TimeOfDay start = const TimeOfDay(hour: 9, minute: 0);
-    TimeOfDay end = const TimeOfDay(hour: 11, minute: 0);
-
     await showDialog<void>(
       context: context,
       builder: (ctx) => _AvailabilityDialog(
-        initialWochentag: selectedTag,
-        initialStart: start,
-        initialEnd: end,
-        onSave: (tag, s, e) {
-          ref
-              .read(profileProvider.notifier)
-              .addAvailability(wochentag: tag, startTime: s, endTime: e);
-        },
+        title: 'Zeitfenster hinzufügen',
+        initialWochentag: _wochentage[0],
+        initialStart: const TimeOfDay(hour: 9, minute: 0),
+        initialEnd: const TimeOfDay(hour: 11, minute: 0),
+        onSave: (tag, s, e) => ref
+            .read(profileProvider.notifier)
+            .addAvailability(wochentag: tag, startTime: s, endTime: e),
+      ),
+    );
+  }
+
+  Future<void> _showEditDialog(
+    BuildContext context,
+    WidgetRef ref,
+    UserAvailability avail,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _AvailabilityDialog(
+        title: 'Zeitfenster bearbeiten',
+        initialWochentag: avail.wochentag,
+        initialStart: avail.startTime,
+        initialEnd: avail.endTime,
+        onSave: (tag, s, e) => ref
+            .read(profileProvider.notifier)
+            .updateAvailability(
+              id: avail.id,
+              wochentag: tag,
+              startTime: s,
+              endTime: e,
+            ),
       ),
     );
   }
@@ -794,12 +896,14 @@ class _SectionHeader extends StatelessWidget {
 // ── Availability Dialog ───────────────────────────────────────────────────────
 
 class _AvailabilityDialog extends StatefulWidget {
+  final String title;
   final String initialWochentag;
   final TimeOfDay initialStart;
   final TimeOfDay initialEnd;
   final void Function(String, TimeOfDay, TimeOfDay) onSave;
 
   const _AvailabilityDialog({
+    required this.title,
     required this.initialWochentag,
     required this.initialStart,
     required this.initialEnd,
@@ -829,7 +933,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Zeitfenster hinzufügen'),
+      title: Text(widget.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -852,8 +956,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
                   icon: const Icon(Icons.access_time, size: 18),
                   label: Text('Von: ${_fmtTime(_start)}'),
                   onPressed: () async {
-                    final t = await showTimePicker(
-                        context: context, initialTime: _start);
+                    final t = await showTimePicker24h(context, initialTime: _start);
                     if (t != null) setState(() => _start = t);
                   },
                 ),
@@ -864,8 +967,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
                   icon: const Icon(Icons.access_time, size: 18),
                   label: Text('Bis: ${_fmtTime(_end)}'),
                   onPressed: () async {
-                    final t = await showTimePicker(
-                        context: context, initialTime: _end);
+                    final t = await showTimePicker24h(context, initialTime: _end);
                     if (t != null) setState(() => _end = t);
                   },
                 ),
@@ -895,6 +997,181 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
           child: const Text('Speichern'),
         ),
       ],
+    );
+  }
+}
+
+// ── Notification Bell ─────────────────────────────────────────────────────────
+
+class _NotificationBell extends ConsumerWidget {
+  const _NotificationBell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(notificationsProvider);
+    final unread = state.unreadCount;
+
+    return IconButton(
+      tooltip: 'Benachrichtigungen',
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.notifications_outlined),
+          if (unread > 0)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: const BoxDecoration(
+                  color: AppColors.error,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+      onPressed: () => showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) => const _NotificationSheet(),
+      ),
+    );
+  }
+}
+
+// ── Notification Sheet ────────────────────────────────────────────────────────
+
+class _NotificationSheet extends ConsumerWidget {
+  const _NotificationSheet();
+
+  String _fmtDate(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 60) return 'vor ${diff.inMinutes} Min.';
+    if (diff.inHours < 24) return 'vor ${diff.inHours} Std.';
+    return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(notificationsProvider);
+    final tt = Theme.of(context).textTheme;
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      builder: (_, scrollCtrl) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                  color: const Color(0xFFD0CDED),
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+            Row(
+              children: [
+                Expanded(
+                    child: Text('Benachrichtigungen', style: tt.titleLarge)),
+                if (state.unreadCount > 0)
+                  TextButton(
+                    onPressed: () =>
+                        ref.read(notificationsProvider.notifier).markAllRead(),
+                    child: const Text('Alle lesen'),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: () =>
+                      ref.read(notificationsProvider.notifier).load(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: state.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : state.notifications.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.notifications_none_rounded,
+                                  size: 48, color: AppColors.muted),
+                              const SizedBox(height: 12),
+                              Text('Keine Benachrichtigungen',
+                                  style: tt.bodyMedium
+                                      ?.copyWith(color: AppColors.muted)),
+                            ],
+                          ),
+                        )
+                      : ListView.separated(
+                          controller: scrollCtrl,
+                          itemCount: state.notifications.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final n = state.notifications[i];
+                            return ListTile(
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 6),
+                              leading: CircleAvatar(
+                                backgroundColor: n.isRead
+                                    ? AppColors.background
+                                    : AppColors.primaryLight,
+                                child: Icon(
+                                  Icons.notifications_rounded,
+                                  size: 20,
+                                  color: n.isRead
+                                      ? AppColors.muted
+                                      : AppColors.primary,
+                                ),
+                              ),
+                              title: Text(n.title,
+                                  style: tt.titleSmall?.copyWith(
+                                      fontWeight: n.isRead
+                                          ? FontWeight.normal
+                                          : FontWeight.w700)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 2),
+                                  Text(n.body, style: tt.bodySmall),
+                                  const SizedBox(height: 4),
+                                  Text(_fmtDate(n.createdAt),
+                                      style: tt.bodySmall
+                                          ?.copyWith(color: AppColors.muted)),
+                                ],
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded,
+                                    size: 20),
+                                color: AppColors.muted,
+                                tooltip: 'Löschen',
+                                onPressed: () => ref
+                                    .read(notificationsProvider.notifier)
+                                    .deleteNotification(n.id),
+                              ),
+                              onTap: n.isRead
+                                  ? null
+                                  : () => ref
+                                      .read(notificationsProvider.notifier)
+                                      .markRead(n.id),
+                            );
+                          },
+                        ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,7 +1,7 @@
 # Datenbankmodell für einen Nutzer.
 from uuid import uuid4
 import sqlalchemy as sa
-from sqlalchemy import Column, String, Text, Enum
+from sqlalchemy import Column, String, Text, Enum, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -20,6 +20,8 @@ class User(Base):
     lernstil = Column(Enum(Lernstil, name="lernstil_enum", create_type=False))
     bio = Column(Text)
     min_match_score = Column(sa.Float, nullable=False, default=0.0)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     subjects = relationship("UserSubject", back_populates="user", cascade="all, delete-orphan")
     availabilities = relationship("Availability", back_populates="user", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")

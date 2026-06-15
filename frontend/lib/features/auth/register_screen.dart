@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_localizations.dart';
 import '../../core/blacklist_service.dart';
 import '../../shared/widgets/study_match_logo.dart';
 import 'auth_provider.dart';
@@ -57,6 +58,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final tt = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -76,12 +78,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               children: [
                 const SizedBox(height: 8),
 
-                // ── Logo ────────────────────────────────────────────────
+                // ── Logo ────────────────────────────────────────────────────
                 const Center(child: StudyMatchLogo(size: 48)),
 
                 const SizedBox(height: 32),
 
-                // ── Register Card ────────────────────────────────────────
+                // ── Register Card ────────────────────────────────────────────
                 Container(
                   decoration: BoxDecoration(
                     color: AppColors.cardWhite,
@@ -98,10 +100,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Konto erstellen 🎓', style: tt.headlineSmall),
+                      Text(l10n.registerTitle, style: tt.headlineSmall),
                       const SizedBox(height: 4),
                       Text(
-                        'Werde Teil der StudyMatch-Community.',
+                        l10n.registerSubtitle,
                         style: tt.bodySmall,
                       ),
                       const SizedBox(height: 24),
@@ -113,17 +115,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           children: [
                             TextFormField(
                               controller: _aliasController,
-                              decoration: const InputDecoration(
-                                labelText: 'Anzeigename / Alias',
-                                prefixIcon: Icon(Icons.badge_outlined),
-                                helperText: 'Wie sollen andere dich nennen?',
+                              decoration: InputDecoration(
+                                labelText: l10n.aliasLabel,
+                                prefixIcon: const Icon(Icons.badge_outlined),
+                                helperText: l10n.aliasHelper,
                               ),
                               textInputAction: TextInputAction.next,
                               autovalidateMode:
                                   AutovalidateMode.onUserInteraction,
                               validator: (v) {
                                 if (v == null || v.trim().length < 2) {
-                                  return 'Mindestens 2 Zeichen erforderlich';
+                                  return l10n.aliasValidation;
                                 }
                                 final blocked = _blacklist?.checkChat(v.trim());
                                 if (blocked != null) return blocked;
@@ -133,9 +135,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _emailController,
-                              decoration: const InputDecoration(
-                                labelText: 'E-Mail',
-                                prefixIcon: Icon(Icons.email_outlined),
+                              decoration: InputDecoration(
+                                labelText: l10n.emailLabel,
+                                prefixIcon: const Icon(Icons.email_outlined),
                               ),
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
@@ -144,7 +146,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                   AutovalidateMode.onUserInteraction,
                               validator: (v) {
                                 if (v == null || !v.contains('@')) {
-                                  return 'Gültige E-Mail eingeben';
+                                  return l10n.emailValidation;
                                 }
                                 return _blacklist?.checkEmail(v);
                               },
@@ -153,9 +155,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             TextFormField(
                               controller: _passwordController,
                               decoration: InputDecoration(
-                                labelText: 'Passwort',
+                                labelText: l10n.passwordLabel,
                                 prefixIcon: const Icon(Icons.lock_outlined),
-                                helperText: 'Mindestens 8 Zeichen',
+                                helperText: l10n.passwordMinLength,
                                 suffixIcon: IconButton(
                                   icon: Icon(
                                     _obscurePassword
@@ -171,7 +173,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               textInputAction: TextInputAction.next,
                               validator: (v) {
                                 if (v == null || v.length < 8) {
-                                  return 'Mindestens 8 Zeichen';
+                                  return l10n.passwordMinLength;
                                 }
                                 return null;
                               },
@@ -179,9 +181,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _studiengangController,
-                              decoration: const InputDecoration(
-                                labelText: 'Studiengang (optional)',
-                                prefixIcon: Icon(Icons.school_outlined),
+                              decoration: InputDecoration(
+                                labelText: l10n.studiengangLabel,
+                                prefixIcon: const Icon(Icons.school_outlined),
                               ),
                               textInputAction: TextInputAction.done,
                               onFieldSubmitted: (_) => _submit(),
@@ -215,7 +217,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Text('Konto erstellen'),
+                            : Text(l10n.registerButton),
                       ),
 
                       const SizedBox(height: 8),
@@ -224,7 +226,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text('Bereits registriert?', style: tt.bodySmall),
+                          Text(l10n.alreadyRegistered, style: tt.bodySmall),
                           TextButton(
                             onPressed: () => context.go('/login'),
                             style: TextButton.styleFrom(
@@ -234,7 +236,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            child: const Text('Anmelden'),
+                            child: Text(l10n.loginLink),
                           ),
                         ],
                       ),

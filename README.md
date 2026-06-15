@@ -11,7 +11,7 @@ Studierende legen ein Profil an, geben Fach, Lernstil und Verfügbarkeit an, sch
 
 Dieses Projekt ist eine mobile App mit folgendem Stack:
 
-- **Frontend:** Flutter (Dart) — vollständig implementiert inkl. eigenem Designsystem, Dark/Light-Mode
+- **Frontend:** Flutter (Dart) — vollständig implementiert inkl. eigenem Designsystem, Dark/Light-Mode, Mehrsprachigkeit (DE/EN)
 - **Backend:** Python 3.11+, FastAPI — vollständig implementiert
 - **Datenbank:** PostgreSQL via **Supabase** (Produktion) + Docker lokal
 - **Auth:** JWT (python-jose + bcrypt direkt — kein passlib)
@@ -35,9 +35,11 @@ backend/
 ### Architektur (Frontend)
 ```
 frontend/lib/
-├── main.dart                  → App-Einstiegspunkt (ProviderScope, Theme-Bindung)
+├── main.dart                  → App-Einstiegspunkt (ProviderScope, Theme-Bindung, Locale-Bindung)
 ├── core/
 │   ├── app_colors.dart        → Dynamische Farben (Light/Dark), statische Getter
+│   ├── app_localizations.dart → Lokalisierung DE/EN (alle UI-Strings als Getter, LocalizationsDelegate)
+│   ├── locale_provider.dart   → StateProvider<Locale> (Standard: de)
 │   ├── api_client.dart        → Dio + JWT-Interceptor + 401-Logout
 │   ├── router.dart            → GoRouter (Auth-Guard, ShellRoute, direktionale Tab-Animationen)
 │   ├── theme.dart             → Material 3 Theme (Light + Dark)
@@ -45,10 +47,10 @@ frontend/lib/
 │   ├── time_picker_utils.dart → showTimePicker24h() mit deutschen Labels
 │   └── blacklist_service.dart → Clientseitige Blacklist-Prüfung
 ├── features/
-│   ├── auth/             → Login, Register, Passwort vergessen, AuthNotifier
+│   ├── auth/             → Login (Sprach-Dropdown DE/EN oben rechts), Register, Passwort vergessen, AuthNotifier
 │   ├── profile/          → Profil bearbeiten, Fächer, Zeitfenster (inkl. Bearbeiten), Dark-Mode-Toggle
 │   ├── matching/         → 3 Tabs: Angenommen (mit Filter) / Anfragen / Vorschläge (mit Filter)
-│   ├── chat/             → WebSocket + REST-Fallback, Chat-UI, Terminvorschlag aus Chat
+│   ├── chat/             → WebSocket + REST-Fallback, Chat-UI, Terminvorschlag, Zurück-Pfeil zur Matchübersicht
 │   └── sessions/         → Lerntreffen, Mini-Kalender (Tages-Filter), Terminbearbeitung mit Bestätigung
 └── shared/
     ├── models/           → Dart-Modelle für alle Entities
@@ -78,6 +80,18 @@ Beide Match-Tabs ("Angenommen" und "Vorschläge") haben einen unabhängigen Scor
 - **Angenommen-Tab:** Lokaler Filter (kein Backend-Save), filtert nur die clientseitige Anzeige.
 
 Beide Filter sind vollständig unabhängig voneinander.
+
+### Mehrsprachigkeit (DE / EN)
+
+Der Login-Screen enthält oben rechts ein Dropdown (🇩🇪 Deutsch / 🇬🇧 English). Die Auswahl steuert `localeProvider` (`StateProvider<Locale>`) und aktualisiert die gesamte App sofort.
+
+Alle UI-Strings (Labels, Buttons, Fehlermeldungen, Wochentage, Monatsnamen, Lernstile) sind in `frontend/lib/core/app_localizations.dart` als DE/EN-Getter hinterlegt. Neue Strings dort ergänzen — nie direkt in Widgets hardcoden.
+
+Nicht übersetzbar: Fächernamen und andere Nutzerdaten kommen aus der Datenbank (immer in der Sprache, in der sie angelegt wurden).
+
+### Chat-Navigation
+
+Der Chat-Screen (`/chat/:matchId`) liegt außerhalb der `ShellRoute` und hat keine Bottom-Navigation. Ein Zurück-Pfeil (`arrow_back`) oben links in der AppBar navigiert per `context.go('/matches')` zurück zur Matchübersicht.
 
 ### Bekannte Fixes / wichtige Hinweise
 - **bcrypt:** `passlib` durch direktes `bcrypt` ersetzt (`security.py`) — passlib 1.7.4 ist inkompatibel mit bcrypt 4.x
@@ -212,7 +226,7 @@ matches (user_a, user_b, status, requested_by_id)
 
 ## MVP-Scope
 
-**Enthalten:** Registrierung, Profil, Fächer, Lernstil, Zeitfenster (inkl. Bearbeiten), Match-Anfragen, Score-Filter (unabhängig pro Tab), Chat, Terminvorschläge aus Chat, Terminbearbeitung mit Bestätigung, Passwort ändern/zurücksetzen, Account löschen, Dark/Light-Mode (persistent), Blacklist (Chat + E-Mail)  
+**Enthalten:** Registrierung, Profil, Fächer, Lernstil, Zeitfenster (inkl. Bearbeiten), Match-Anfragen, Score-Filter (unabhängig pro Tab), Chat (mit Zurück-Navigation), Terminvorschläge aus Chat, Terminbearbeitung mit Bestätigung, Passwort ändern/zurücksetzen, Account löschen, Dark/Light-Mode (persistent), Blacklist (Chat + E-Mail), Mehrsprachigkeit DE/EN  
 **Nicht im MVP:** E-Mail-Versand, Video-Call, Kalender-Sync, Hochschul-SSO, Gruppenmatching, Gamification
 
 ---

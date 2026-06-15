@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_localizations.dart';
+import '../../core/locale_provider.dart';
 import '../../shared/widgets/study_match_logo.dart';
 import 'auth_provider.dart';
 
@@ -30,6 +32,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _showForgotPasswordDialog() async {
+    final l10n = AppLocalizations.of(context);
     final emailCtrl = TextEditingController();
     final newPwCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
@@ -41,51 +44,51 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Passwort zurücksetzen'),
+          title: Text(l10n.forgotPasswordTitle),
           content: Form(
             key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Gib deine E-Mail-Adresse und ein neues Passwort ein.',
-                  style: TextStyle(fontSize: 13),
+                Text(
+                  l10n.forgotPasswordHint,
+                  style: const TextStyle(fontSize: 13),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: emailCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'E-Mail',
-                    prefixIcon: Icon(Icons.email_outlined),
+                  decoration: InputDecoration(
+                    labelText: l10n.emailLabel,
+                    prefixIcon: const Icon(Icons.email_outlined),
                   ),
                   keyboardType: TextInputType.emailAddress,
                   autocorrect: false,
                   validator: (v) => v != null && v.contains('@')
                       ? null
-                      : 'Gültige E-Mail eingeben',
+                      : l10n.emailValidation,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: newPwCtrl,
                   obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Neues Passwort',
-                    prefixIcon: Icon(Icons.lock_reset_outlined),
+                  decoration: InputDecoration(
+                    labelText: l10n.newPassword,
+                    prefixIcon: const Icon(Icons.lock_reset_outlined),
                   ),
                   validator: (v) => v != null && v.length >= 8
                       ? null
-                      : 'Mindestens 8 Zeichen',
+                      : l10n.passwordMinLength,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: confirmCtrl,
                   obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Passwort bestätigen',
-                    prefixIcon: Icon(Icons.lock_reset_outlined),
+                  decoration: InputDecoration(
+                    labelText: l10n.confirmPassword,
+                    prefixIcon: const Icon(Icons.lock_reset_outlined),
                   ),
                   validator: (v) =>
-                      v == newPwCtrl.text ? null : 'Passwörter stimmen nicht überein',
+                      v == newPwCtrl.text ? null : l10n.passwordsNoMatch,
                 ),
                 if (dialogError != null) ...[
                   const SizedBox(height: 10),
@@ -101,7 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           actions: [
             TextButton(
               onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
-              child: const Text('Abbrechen'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               onPressed: isSaving
@@ -123,15 +126,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         if (ctx.mounted) Navigator.of(ctx).pop();
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Passwort wurde zurückgesetzt. Du kannst dich jetzt einloggen.'),
+                            SnackBar(
+                              content: Text(l10n.resetSuccess),
                             ),
                           );
                         }
                       } on DioException {
                         setDialogState(() {
                           isSaving = false;
-                          dialogError = 'Zurücksetzen fehlgeschlagen. Bitte versuche es erneut.';
+                          dialogError = l10n.resetError;
                         });
                       }
                     },
@@ -141,7 +144,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       width: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     )
-                  : const Text('Zurücksetzen'),
+                  : Text(l10n.resetButton),
             ),
           ],
         ),
@@ -165,6 +168,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final tt = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
+    final currentLocale = ref.watch(localeProvider);
 
     return Scaffold(
       body: SafeArea(
@@ -175,14 +180,44 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 36),
+                const SizedBox(height: 16),
 
-                // ── Logo ────────────────────────────────────────────────
+                // ── Language switcher ───────────────────────────────────────
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<Locale>(
+                      value: currentLocale,
+                      isDense: true,
+                      items: [
+                        DropdownMenuItem(
+                          value: const Locale('de'),
+                          child: Text(l10n.langDe,
+                              style: const TextStyle(fontSize: 13)),
+                        ),
+                        DropdownMenuItem(
+                          value: const Locale('en'),
+                          child: Text(l10n.langEn,
+                              style: const TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                      onChanged: (locale) {
+                        if (locale != null) {
+                          ref.read(localeProvider.notifier).state = locale;
+                        }
+                      },
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // ── Logo ────────────────────────────────────────────────────
                 const Center(child: StudyMatchLogo(size: 52)),
 
                 const SizedBox(height: 44),
 
-                // ── Hero Row ─────────────────────────────────────────────
+                // ── Hero Row ─────────────────────────────────────────────────
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -191,18 +226,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Lernen verbindet.',
+                            l10n.loginTagline1,
                             style: tt.headlineMedium,
                           ),
                           Text(
-                            'Erfolg entsteht.',
+                            l10n.loginTagline2,
                             style: tt.headlineMedium?.copyWith(
                               color: AppColors.primary,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Finde deinen Lernpartner.',
+                            l10n.loginSubtitle,
                             style: tt.bodyLarge?.copyWith(
                               color: AppColors.muted,
                             ),
@@ -236,7 +271,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                 const SizedBox(height: 36),
 
-                // ── Login Card ───────────────────────────────────────────
+                // ── Login Card ───────────────────────────────────────────────
                 Container(
                   decoration: BoxDecoration(
                     color: AppColors.cardWhite,
@@ -253,10 +288,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Willkommen zurück 👋', style: tt.headlineSmall),
+                      Text(l10n.loginTitle, style: tt.headlineSmall),
                       const SizedBox(height: 4),
                       Text(
-                        'Logge dich ein und setze deine Lernreise fort.',
+                        l10n.loginSubheading,
                         style: tt.bodySmall,
                       ),
                       const SizedBox(height: 24),
@@ -268,22 +303,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           children: [
                             TextFormField(
                               controller: _emailController,
-                              decoration: const InputDecoration(
-                                labelText: 'E-Mail',
-                                prefixIcon: Icon(Icons.email_outlined),
+                              decoration: InputDecoration(
+                                labelText: l10n.emailLabel,
+                                prefixIcon: const Icon(Icons.email_outlined),
                               ),
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
                               autocorrect: false,
                               validator: (v) => v != null && v.contains('@')
                                   ? null
-                                  : 'Gültige E-Mail eingeben',
+                                  : l10n.emailValidation,
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _passwordController,
                               decoration: InputDecoration(
-                                labelText: 'Passwort',
+                                labelText: l10n.passwordLabel,
                                 prefixIcon: const Icon(Icons.lock_outlined),
                                 suffixIcon: IconButton(
                                   icon: Icon(
@@ -301,7 +336,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               onFieldSubmitted: (_) => _submit(),
                               validator: (v) => v != null && v.isNotEmpty
                                   ? null
-                                  : 'Passwort eingeben',
+                                  : l10n.passwordValidation,
                             ),
                           ],
                         ),
@@ -328,7 +363,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             onTap: () =>
                                 setState(() => _rememberMe = !_rememberMe),
                             child: Text(
-                              'Angemeldet bleiben',
+                              l10n.rememberMe,
                               style: tt.bodySmall?.copyWith(
                                 color: AppColors.navy,
                               ),
@@ -344,7 +379,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               textStyle: const TextStyle(fontSize: 12),
                             ),
-                            child: const Text('Passwort vergessen?'),
+                            child: Text(l10n.forgotPassword),
                           ),
                         ],
                       ),
@@ -374,7 +409,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Text('Anmelden'),
+                            : Text(l10n.loginButton),
                       ),
 
                       const SizedBox(height: 8),
@@ -384,7 +419,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'Noch kein Konto?',
+                            l10n.noAccount,
                             style: tt.bodySmall,
                           ),
                           TextButton(
@@ -396,7 +431,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            child: const Text('Jetzt Registrieren'),
+                            child: Text(l10n.registerNow),
                           ),
                         ],
                       ),

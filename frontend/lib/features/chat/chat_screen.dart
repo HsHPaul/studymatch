@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_localizations.dart';
 import '../../core/time_picker_utils.dart';
 import '../../core/blacklist_service.dart';
 import '../../features/auth/auth_provider.dart';
@@ -12,6 +14,7 @@ import '../../shared/models/message.dart';
 import '../../shared/models/room.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import 'chat_provider.dart';
+import 'unread_chats_provider.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String matchId;
@@ -31,7 +34,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.invalidate(pendingSessionsProvider(widget.matchId));
+      if (!mounted) return;
+      ref.invalidate(pendingSessionsProvider(widget.matchId));
+      ref.read(unreadChatsProvider.notifier).markRead(widget.matchId);
     });
     _controller.addListener(() {
       if (_blacklistError != null) setState(() => _blacklistError = null);
@@ -58,6 +63,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _showSessionDialog(BuildContext context, WidgetRef ref, String matchId) async {
+    final l10n = AppLocalizations.of(context);
     DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
     TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
     TimeOfDay? selectedTimeEnde;
@@ -74,7 +80,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         builder: (ctx, setS) {
           final rooms = ref.read(roomsProvider);
           return AlertDialog(
-            title: const Text('Termin vorschlagen'),
+            title: Text(l10n.sessionProposalTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -99,7 +105,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Expanded(
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.access_time_rounded, size: 16),
-                        label: Text('Von: ${fmtTime(selectedTime)}'),
+                        label: Text('${l10n.from}: ${fmtTime(selectedTime)}'),
                         onPressed: () async {
                           final t = await showTimePicker24h(ctx, initialTime: selectedTime);
                           if (t != null) setS(() => selectedTime = t);
@@ -110,7 +116,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Expanded(
                       child: OutlinedButton.icon(
                         icon: const Icon(Icons.access_time_filled_rounded, size: 16),
-                        label: Text(selectedTimeEnde != null ? 'Bis: ${fmtTime(selectedTimeEnde!)}' : 'Bis: –'),
+                        label: Text(selectedTimeEnde != null ? '${l10n.until}: ${fmtTime(selectedTimeEnde!)}' : '${l10n.until}: –'),
                         onPressed: () async {
                           final t = await showTimePicker24h(ctx, initialTime: selectedTimeEnde ?? selectedTime);
                           if (t != null) setS(() => selectedTimeEnde = t);
@@ -124,12 +130,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   loading: () => const SizedBox.shrink(),
                   error: (_, __) => const SizedBox.shrink(),
                   data: (roomList) => DropdownButtonFormField<Room>(
-                    decoration: const InputDecoration(
-                      labelText: 'Raum (optional)',
-                      prefixIcon: Icon(Icons.room_outlined),
+                    decoration: InputDecoration(
+                      labelText: l10n.roomOptional,
+                      prefixIcon: const Icon(Icons.room_outlined),
                     ),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('Kein Raum')),
+                      DropdownMenuItem(value: null, child: Text(l10n.noRoom)),
                       ...roomList.map((r) => DropdownMenuItem(value: r, child: Text(r.displayName))),
                     ],
                     onChanged: (r) => setS(() => selectedRoom = r),
@@ -140,7 +146,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Abbrechen'),
+                child: Text(l10n.cancel),
               ),
               FilledButton(
                 onPressed: () async {
@@ -155,11 +161,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   if (context.mounted) {
                     ref.invalidate(pendingSessionsProvider(matchId));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(ok ? 'Terminanfrage gesendet!' : 'Fehler beim Senden')),
+                      SnackBar(content: Text(ok ? l10n.sessionRequestSent : l10n.sessionRequestError)),
                     );
                   }
                 },
-                child: const Text('Anfrage senden'),
+                child: Text(l10n.sendRequest),
               ),
             ],
           );
@@ -184,6 +190,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final chat = ref.watch(chatProvider(widget.matchId));
     ref.watch(authProvider); // keep alive
     final myUserId = ref.watch(profileProvider).profile?.id ?? '';
@@ -195,16 +202,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.listen(chatProvider(widget.matchId), (prev, next) {
       if ((prev?.messages.length ?? 0) < next.messages.length) {
         _scrollToBottom();
+        ref.read(unreadChatsProvider.notifier).markRead(widget.matchId);
       }
     });
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: l10n.backToMatches,
+          onPressed: () => context.go('/matches'),
+        ),
         title: Text(partnerAlias),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Aktualisieren',
+            tooltip: l10n.refresh,
             onPressed: () => ref.invalidate(pendingSessionsProvider(widget.matchId)),
           ),
           Padding(
@@ -245,7 +258,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       textStyle: const TextStyle(fontSize: 12),
                     ),
-                    child: const Text('Erneut laden'),
+                    child: Text(l10n.chatReload),
                   ),
                 ],
               ),
@@ -253,7 +266,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _PendingSessionsBanner(matchId: widget.matchId),
           Expanded(
             child: chat.isLoading
-                ? const LoadingIndicator(message: 'Nachrichten laden…')
+                ? LoadingIndicator(message: l10n.chatLoading)
                 : chat.messages.isEmpty
                     ? const _EmptyChat()
                     : _MessageList(
@@ -301,6 +314,7 @@ class _EmptyChat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final tt = Theme.of(context).textTheme;
     return Center(
       child: Column(
@@ -324,9 +338,9 @@ class _EmptyChat extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Text('Noch keine Nachrichten.', style: tt.titleSmall),
+          Text(l10n.noMessages, style: tt.titleSmall),
           const SizedBox(height: 4),
-          Text('Schreib die erste Nachricht!', style: tt.bodySmall),
+          Text(l10n.writeFirstMessage, style: tt.bodySmall),
         ],
       ),
     );
@@ -482,6 +496,7 @@ class _PendingSessionsBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final pending = ref.watch(pendingSessionsProvider(matchId));
 
     return pending.when(
@@ -500,7 +515,7 @@ class _PendingSessionsBanner extends ConsumerWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Terminanfrage: ${_fmtDate(s.datum)} um ${_fmtTime(s.uhrzeit)} Uhr',
+                      l10n.sessionRequestBanner(_fmtDate(s.datum), _fmtTime(s.uhrzeit)),
                       style: TextStyle(fontSize: 13, color: AppColors.navy),
                     ),
                   ),
@@ -514,7 +529,7 @@ class _PendingSessionsBanner extends ConsumerWidget {
                       await ref.read(sessionsProvider.notifier).declineSession(s.id);
                       ref.invalidate(pendingSessionsProvider(matchId));
                     },
-                    child: const Text('Ablehnen'),
+                    child: Text(l10n.decline),
                   ),
                   FilledButton(
                     style: FilledButton.styleFrom(
@@ -527,11 +542,11 @@ class _PendingSessionsBanner extends ConsumerWidget {
                       ref.invalidate(pendingSessionsProvider(matchId));
                       if (ok && context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Termin bestätigt!')),
+                          SnackBar(content: Text(l10n.acceptedSession)),
                         );
                       }
                     },
-                    child: const Text('Annehmen'),
+                    child: Text(l10n.accept),
                   ),
                 ],
               ),
@@ -558,6 +573,7 @@ class _InputBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardWhite,
@@ -577,14 +593,14 @@ class _InputBar extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.calendar_month_rounded),
                 color: AppColors.primary,
-                tooltip: 'Termin vorschlagen',
+                tooltip: l10n.proposeSession,
                 onPressed: onSession,
               ),
               Expanded(
                 child: TextField(
                   controller: controller,
                   decoration: InputDecoration(
-                    hintText: 'Nachricht…',
+                    hintText: l10n.messageHint,
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: 18, vertical: 12),
                     border: OutlineInputBorder(

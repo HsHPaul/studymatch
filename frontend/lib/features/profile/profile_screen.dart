@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_localizations.dart';
 import '../../core/theme_provider.dart';
 import '../../core/time_picker_utils.dart';
 import '../../features/auth/auth_provider.dart';
 import '../../features/notifications/notifications_provider.dart';
-import '../../shared/models/notification.dart';
 import '../../shared/models/subject.dart';
 import '../../shared/models/user.dart';
 import '../../shared/widgets/loading_indicator.dart';
@@ -21,20 +21,11 @@ const _wochentage = [
   'samstag',
 ];
 
-const _wochentageLabels = {
-  'montag': 'Montag',
-  'dienstag': 'Dienstag',
-  'mittwoch': 'Mittwoch',
-  'donnerstag': 'Donnerstag',
-  'freitag': 'Freitag',
-  'samstag': 'Samstag',
-};
-
-const _lernstilOptions = {
-  'still': 'Ruhig / Still',
-  'gemischt': 'Gemischt',
-  'diskutierend': 'Diskutierend',
-};
+Map<String, String> _lernstilOptionsLocalized(AppLocalizations l10n) => {
+      'still': l10n.lernstilStill,
+      'gemischt': l10n.lernstilGemischt,
+      'diskutierend': l10n.lernstilDiskutierend,
+    };
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -79,6 +70,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _showChangePasswordDialog() async {
+    final l10n = AppLocalizations.of(context);
     final currentCtrl = TextEditingController();
     final newCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
@@ -87,7 +79,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Passwort ändern'),
+        title: Text(l10n.changePasswordTitle),
         content: Form(
           key: formKey,
           child: Column(
@@ -96,36 +88,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               TextFormField(
                 controller: currentCtrl,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Aktuelles Passwort',
-                  prefixIcon: Icon(Icons.lock_outline),
+                decoration: InputDecoration(
+                  labelText: l10n.currentPassword,
+                  prefixIcon: const Icon(Icons.lock_outline),
                 ),
                 validator: (v) =>
-                    v != null && v.isNotEmpty ? null : 'Pflichtfeld',
+                    v != null && v.isNotEmpty ? null : l10n.required_,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: newCtrl,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Neues Passwort',
-                  prefixIcon: Icon(Icons.lock_reset_outlined),
+                decoration: InputDecoration(
+                  labelText: l10n.newPasswordLabel,
+                  prefixIcon: const Icon(Icons.lock_reset_outlined),
                 ),
                 validator: (v) => v != null && v.length >= 8
                     ? null
-                    : 'Mindestens 8 Zeichen',
+                    : l10n.passwordMinLength,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: confirmCtrl,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Neues Passwort bestätigen',
-                  prefixIcon: Icon(Icons.lock_reset_outlined),
+                decoration: InputDecoration(
+                  labelText: l10n.confirmNewPassword,
+                  prefixIcon: const Icon(Icons.lock_reset_outlined),
                 ),
                 validator: (v) => v == newCtrl.text
                     ? null
-                    : 'Passwörter stimmen nicht überein',
+                    : l10n.passwordsNoMatch,
               ),
             ],
           ),
@@ -133,7 +125,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Abbrechen'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () async {
@@ -149,39 +141,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   );
               if (ok && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Passwort erfolgreich geändert'),
-                  ),
+                  SnackBar(content: Text(l10n.passwordChangedSuccess)),
                 );
               }
             },
-            child: const Text('Speichern'),
+            child: Text(l10n.save),
           ),
         ],
       ),
     );
-
   }
 
   Future<void> _confirmDeleteAccount() async {
+    final l10n = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Account wirklich löschen?'),
-        content: const Text(
-          'Dein Account wird vollständig und unwiderruflich gelöscht – '
-          'einschließlich Profil, Fächer, Verfügbarkeiten, Matches und Nachrichten. '
-          'Diese Aktion kann nicht rückgängig gemacht werden.',
-        ),
+        title: Text(l10n.deleteAccountTitle),
+        content: Text(l10n.deleteAccountText),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Abbrechen'),
+            child: Text(l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Ja, Account löschen'),
+            child: Text(l10n.deleteAccountConfirm),
           ),
         ],
       ),
@@ -207,15 +193,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final ps = ref.watch(profileProvider);
 
     if (ps.isLoading) {
-      return const Scaffold(body: LoadingIndicator(message: 'Profil laden…'));
+      return Scaffold(body: LoadingIndicator(message: l10n.loadingProfile));
     }
     if (ps.profile == null) {
       return Scaffold(
         body: ErrorView(
-          message: ps.error ?? 'Profil konnte nicht geladen werden',
+          message: ps.error ?? l10n.profileLoadError,
           onRetry: () => ref.read(profileProvider.notifier).load(),
         ),
       );
@@ -223,7 +210,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mein Profil'),
+        title: Text(l10n.myProfile),
         actions: [
           _NotificationBell(),
           Consumer(builder: (context, ref, _) {
@@ -232,7 +219,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               icon: Icon(isDark
                   ? Icons.light_mode_outlined
                   : Icons.dark_mode_outlined),
-              tooltip: isDark ? 'Heller Modus' : 'Dunkler Modus',
+              tooltip: isDark ? l10n.lightMode : l10n.darkMode,
               onPressed: () =>
                   ref.read(isDarkModeProvider.notifier).toggle(),
             );
@@ -240,12 +227,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           IconButton(
             icon: const Icon(Icons.password_outlined),
             onPressed: _showChangePasswordDialog,
-            tooltip: 'Passwort ändern',
+            tooltip: l10n.changePassword,
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             onPressed: () => ref.read(authProvider.notifier).logout(),
-            tooltip: 'Abmelden',
+            tooltip: l10n.logout,
           ),
         ],
       ),
@@ -296,7 +283,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.red.shade400,
                 ),
-                child: const Text('Account löschen'),
+                child: Text(l10n.deleteAccount),
               ),
             ],
           ),
@@ -361,7 +348,7 @@ class _ProfileInfo extends StatelessWidget {
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 20),
                             color: AppColors.primary,
-                            tooltip: 'Bearbeiten',
+                            tooltip: AppLocalizations.of(context).edit,
                             visualDensity: VisualDensity.compact,
                             padding: EdgeInsets.zero,
                             onPressed: onEdit,
@@ -392,7 +379,7 @@ class _ProfileInfo extends StatelessWidget {
             const SizedBox(height: 8),
             _InfoRow(
               icon: Icons.psychology_outlined,
-              label: _lernstilOptions[profile.lernstil] ?? profile.lernstil!,
+              label: _lernstilOptionsLocalized(AppLocalizations.of(context))[profile.lernstil] ?? profile.lernstil!,
             ),
           ],
           if (profile.bio != null && profile.bio!.isNotEmpty) ...[
@@ -458,6 +445,9 @@ class _EditForm extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final lernstilOpts = _lernstilOptionsLocalized(l10n);
+
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardWhite,
@@ -477,29 +467,29 @@ class _EditForm extends StatelessWidget {
           children: [
             TextFormField(
               controller: aliasCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Anzeigename',
-                prefixIcon: Icon(Icons.badge_outlined),
+              decoration: InputDecoration(
+                labelText: l10n.displayName,
+                prefixIcon: const Icon(Icons.badge_outlined),
               ),
               validator: (v) =>
-                  v != null && v.trim().length >= 2 ? null : 'Mindestens 2 Zeichen',
+                  v != null && v.trim().length >= 2 ? null : l10n.aliasMin2,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: studiengangCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Studiengang',
-                prefixIcon: Icon(Icons.school_outlined),
+              decoration: InputDecoration(
+                labelText: l10n.studiengang,
+                prefixIcon: const Icon(Icons.school_outlined),
               ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: selectedLernstil,
-              decoration: const InputDecoration(
-                labelText: 'Lernstil',
-                prefixIcon: Icon(Icons.psychology_outlined),
+              initialValue: selectedLernstil,
+              decoration: InputDecoration(
+                labelText: l10n.lernstilLabel,
+                prefixIcon: const Icon(Icons.psychology_outlined),
               ),
-              items: _lernstilOptions.entries
+              items: lernstilOpts.entries
                   .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
                   .toList(),
               onChanged: onLernstilChanged,
@@ -507,9 +497,9 @@ class _EditForm extends StatelessWidget {
             const SizedBox(height: 12),
             TextFormField(
               controller: bioCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Über mich (Bio)',
-                prefixIcon: Icon(Icons.notes_outlined),
+              decoration: InputDecoration(
+                labelText: l10n.bio,
+                prefixIcon: const Icon(Icons.notes_outlined),
               ),
               maxLines: 3,
               maxLength: 500,
@@ -520,7 +510,7 @@ class _EditForm extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: onCancel,
-                    child: const Text('Abbrechen'),
+                    child: Text(l10n.cancel),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -536,7 +526,7 @@ class _EditForm extends StatelessWidget {
                               color: Colors.white,
                             ),
                           )
-                        : const Text('Speichern'),
+                        : Text(l10n.save),
                   ),
                 ),
               ],
@@ -557,6 +547,7 @@ class _SubjectsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final allSubjects = ref.watch(allSubjectsProvider);
     final tt = Theme.of(context).textTheme;
 
@@ -566,13 +557,13 @@ class _SubjectsSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionHeader(
-          title: 'Meine Fächer',
+          title: l10n.mySubjects,
           action: TextButton.icon(
             onPressed: atLimit
                 ? null
-                : () => _showAddSubjectDialog(context, ref, allSubjects),
+                : () => _showAddSubjectDialog(context, ref, allSubjects, l10n),
             icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Hinzufügen'),
+            label: Text(l10n.add),
           ),
         ),
         const SizedBox(height: 10),
@@ -591,7 +582,7 @@ class _SubjectsSection extends ConsumerWidget {
             ),
             padding: const EdgeInsets.all(16),
             child: Text(
-              'Noch keine Fächer eingetragen.',
+              l10n.noSubjects,
               style: tt.bodyMedium?.copyWith(color: AppColors.muted),
             ),
           )
@@ -616,6 +607,7 @@ class _SubjectsSection extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     AsyncValue<List<Subject>> allSubjects,
+    AppLocalizations l10n,
   ) {
     showDialog<void>(
       context: context,
@@ -644,15 +636,16 @@ class _SubjectPickerDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final atLimit = mySubjectCount >= 5;
     return AlertDialog(
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Fach hinzufügen'),
+          Text(l10n.addSubjectTitle),
           const SizedBox(height: 4),
           Text(
-            'max. 5 Fächer gleichzeitig ($mySubjectCount/5)',
+            l10n.subjectLimit(mySubjectCount),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontSize: (Theme.of(context).textTheme.bodySmall?.fontSize ?? 12) + 2,
                   color: atLimit
@@ -672,19 +665,19 @@ class _SubjectPickerDialog extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Du hast bereits die maximale Anzahl an Fächern erreicht. Entferne zuerst ein Fach, um ein neues hinzuzufügen.',
+                  l10n.subjectLimitReached,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               )
             else
               allSubjects.when(
                 loading: () => const LoadingIndicator(),
-                error: (e, _) => Text('Fehler: $e'),
+                error: (e, _) => Text('${l10n.error}: $e'),
                 data: (subjects) {
                   final available =
                       subjects.where((s) => !mySubjectIds.contains(s.id)).toList();
                   if (available.isEmpty) {
-                    return const Text('Alle Fächer bereits hinzugefügt.');
+                    return Text(l10n.allSubjectsAdded);
                   }
                   return ListView.builder(
                     shrinkWrap: true,
@@ -709,7 +702,7 @@ class _SubjectPickerDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Abbrechen'),
+          child: Text(l10n.cancel),
         ),
       ],
     );
@@ -725,17 +718,18 @@ class _AvailabilitySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final tt = Theme.of(context).textTheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SectionHeader(
-          title: 'Meine Verfügbarkeit',
+          title: l10n.myAvailability,
           action: TextButton.icon(
-            onPressed: () => _showAddDialog(context, ref),
+            onPressed: () => _showAddDialog(context, ref, l10n),
             icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Hinzufügen'),
+            label: Text(l10n.add),
           ),
         ),
         const SizedBox(height: 10),
@@ -754,7 +748,7 @@ class _AvailabilitySection extends ConsumerWidget {
             ),
             padding: const EdgeInsets.all(16),
             child: Text(
-              'Noch keine Zeitfenster eingetragen.',
+              l10n.noAvailability,
               style: tt.bodyMedium?.copyWith(color: AppColors.muted),
             ),
           )
@@ -791,7 +785,7 @@ class _AvailabilitySection extends ConsumerWidget {
                     ),
                   ),
                   title: Text(
-                    _wochentageLabels[a.wochentag] ?? a.wochentag,
+                    l10n.wochentageLabels[a.wochentag] ?? a.wochentag,
                     style: tt.titleSmall,
                   ),
                   subtitle: Text(
@@ -806,15 +800,15 @@ class _AvailabilitySection extends ConsumerWidget {
                           Icons.edit_outlined,
                           color: AppColors.muted,
                         ),
-                        tooltip: 'Bearbeiten',
-                        onPressed: () => _showEditDialog(context, ref, a),
+                        tooltip: l10n.edit,
+                        onPressed: () => _showEditDialog(context, ref, a, l10n),
                       ),
                       IconButton(
                         icon: Icon(
                           Icons.delete_outline_rounded,
                           color: AppColors.muted,
                         ),
-                        tooltip: 'Löschen',
+                        tooltip: l10n.delete,
                         onPressed: () => ref
                             .read(profileProvider.notifier)
                             .removeAvailability(a.id),
@@ -829,11 +823,11 @@ class _AvailabilitySection extends ConsumerWidget {
     );
   }
 
-  Future<void> _showAddDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showAddDialog(BuildContext context, WidgetRef ref, AppLocalizations l10n) async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => _AvailabilityDialog(
-        title: 'Zeitfenster hinzufügen',
+        title: l10n.addTimeSlot,
         initialWochentag: _wochentage[0],
         initialStart: const TimeOfDay(hour: 9, minute: 0),
         initialEnd: const TimeOfDay(hour: 11, minute: 0),
@@ -848,11 +842,12 @@ class _AvailabilitySection extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     UserAvailability avail,
+    AppLocalizations l10n,
   ) async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => _AvailabilityDialog(
-        title: 'Zeitfenster bearbeiten',
+        title: l10n.editTimeSlot,
         initialWochentag: avail.wochentag,
         initialStart: avail.startTime,
         initialEnd: avail.endTime,
@@ -932,18 +927,19 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AlertDialog(
       title: Text(widget.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<String>(
-            value: _wochentag,
-            decoration: const InputDecoration(labelText: 'Wochentag'),
+            initialValue: _wochentag,
+            decoration: InputDecoration(labelText: l10n.dayLabel),
             items: _wochentage
                 .map((d) => DropdownMenuItem(
                       value: d,
-                      child: Text(_wochentageLabels[d] ?? d),
+                      child: Text(l10n.wochentageLabels[d] ?? d),
                     ))
                 .toList(),
             onChanged: (v) => setState(() => _wochentag = v!),
@@ -954,7 +950,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.access_time, size: 18),
-                  label: Text('Von: ${_fmtTime(_start)}'),
+                  label: Text('${l10n.from}: ${_fmtTime(_start)}'),
                   onPressed: () async {
                     final t = await showTimePicker24h(context, initialTime: _start);
                     if (t != null) setState(() => _start = t);
@@ -965,7 +961,7 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.access_time, size: 18),
-                  label: Text('Bis: ${_fmtTime(_end)}'),
+                  label: Text('${l10n.until}: ${_fmtTime(_end)}'),
                   onPressed: () async {
                     final t = await showTimePicker24h(context, initialTime: _end);
                     if (t != null) setState(() => _end = t);
@@ -979,22 +975,21 @@ class _AvailabilityDialogState extends State<_AvailabilityDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Abbrechen'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           onPressed: () {
             if (_end.hour < _start.hour ||
                 (_end.hour == _start.hour && _end.minute <= _start.minute)) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Endzeit muss nach Startzeit liegen')),
+                SnackBar(content: Text(l10n.endMustBeAfterStart)),
               );
               return;
             }
             widget.onSave(_wochentag, _start, _end);
             Navigator.of(context).pop();
           },
-          child: const Text('Speichern'),
+          child: Text(l10n.save),
         ),
       ],
     );
@@ -1008,11 +1003,12 @@ class _NotificationBell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final state = ref.watch(notificationsProvider);
     final unread = state.unreadCount;
 
     return IconButton(
-      tooltip: 'Benachrichtigungen',
+      tooltip: l10n.notifications,
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -1049,16 +1045,17 @@ class _NotificationBell extends ConsumerWidget {
 class _NotificationSheet extends ConsumerWidget {
   const _NotificationSheet();
 
-  String _fmtDate(DateTime dt) {
+  String _fmtDate(DateTime dt, AppLocalizations l10n) {
     final now = DateTime.now();
     final diff = now.difference(dt);
-    if (diff.inMinutes < 60) return 'vor ${diff.inMinutes} Min.';
-    if (diff.inHours < 24) return 'vor ${diff.inHours} Std.';
+    if (diff.inMinutes < 60) return l10n.minutesAgo(diff.inMinutes);
+    if (diff.inHours < 24) return l10n.hoursAgo(diff.inHours);
     return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}';
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final state = ref.watch(notificationsProvider);
     final tt = Theme.of(context).textTheme;
 
@@ -1081,12 +1078,12 @@ class _NotificationSheet extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                    child: Text('Benachrichtigungen', style: tt.titleLarge)),
+                    child: Text(l10n.notifications, style: tt.titleLarge)),
                 if (state.unreadCount > 0)
                   TextButton(
                     onPressed: () =>
                         ref.read(notificationsProvider.notifier).markAllRead(),
-                    child: const Text('Alle lesen'),
+                    child: Text(l10n.markAllRead),
                   ),
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded),
@@ -1107,7 +1104,7 @@ class _NotificationSheet extends ConsumerWidget {
                               Icon(Icons.notifications_none_rounded,
                                   size: 48, color: AppColors.muted),
                               const SizedBox(height: 12),
-                              Text('Keine Benachrichtigungen',
+                              Text(l10n.noNotifications,
                                   style: tt.bodyMedium
                                       ?.copyWith(color: AppColors.muted)),
                             ],
@@ -1146,7 +1143,7 @@ class _NotificationSheet extends ConsumerWidget {
                                   const SizedBox(height: 2),
                                   Text(n.body, style: tt.bodySmall),
                                   const SizedBox(height: 4),
-                                  Text(_fmtDate(n.createdAt),
+                                  Text(_fmtDate(n.createdAt, l10n),
                                       style: tt.bodySmall
                                           ?.copyWith(color: AppColors.muted)),
                                 ],
@@ -1155,7 +1152,7 @@ class _NotificationSheet extends ConsumerWidget {
                                 icon: const Icon(Icons.delete_outline_rounded,
                                     size: 20),
                                 color: AppColors.muted,
-                                tooltip: 'Löschen',
+                                tooltip: l10n.delete,
                                 onPressed: () => ref
                                     .read(notificationsProvider.notifier)
                                     .deleteNotification(n.id),

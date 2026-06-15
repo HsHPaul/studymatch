@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/app_colors.dart';
+import 'core/app_localizations.dart';
+import 'core/locale_provider.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 import 'core/theme_provider.dart';
@@ -20,6 +23,8 @@ class StudyMatchApp extends ConsumerWidget {
     AppColors.dark = isDark;
 
     final router = ref.watch(routerProvider);
+    final locale = ref.watch(localeProvider);
+
     return MaterialApp.router(
       title: 'StudyMatch',
       theme: AppTheme.light,
@@ -27,6 +32,14 @@ class StudyMatchApp extends ConsumerWidget {
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      locale: locale,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('de'), Locale('en')],
     );
   }
 }

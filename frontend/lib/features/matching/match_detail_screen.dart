@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_localizations.dart';
 import '../../shared/models/match.dart';
 import '../../shared/widgets/loading_indicator.dart';
 import 'matching_provider.dart';
@@ -16,22 +17,23 @@ class MatchDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final state = ref.watch(matchesProvider);
 
     return state.when(
-      loading: () => Scaffold(
-        body: const LoadingIndicator(),
+      loading: () => const Scaffold(
+        body: LoadingIndicator(),
       ),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
-        body: const ErrorView(message: 'Match nicht gefunden.'),
+        body: ErrorView(message: l10n.matchNotFound),
       ),
       data: (matches) {
         final match = matches.where((m) => m.userId == matchId).firstOrNull;
         if (match == null) {
           return Scaffold(
-                appBar: AppBar(),
-            body: const ErrorView(message: 'Match nicht gefunden.'),
+            appBar: AppBar(),
+            body: ErrorView(message: l10n.matchNotFound),
           );
         }
         return _MatchDetailView(match: match);
@@ -48,6 +50,7 @@ class _MatchDetailView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tt = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -101,9 +104,9 @@ class _MatchDetailView extends ConsumerWidget {
 
             // ── Gemeinsame Fächer ────────────────────────────────────────
             if (match.gemeinsacheFaecher.isNotEmpty) ...[
-              const _SectionHeader(
+              _SectionHeader(
                 icon: Icons.book_outlined,
-                title: 'Gemeinsame Fächer',
+                title: l10n.commonSubjects,
               ),
               const SizedBox(height: 10),
               Wrap(
@@ -118,9 +121,9 @@ class _MatchDetailView extends ConsumerWidget {
 
             // ── Lernstil ─────────────────────────────────────────────────
             if (match.lernstil != null) ...[
-              const _SectionHeader(
+              _SectionHeader(
                 icon: Icons.psychology_outlined,
-                title: 'Lernstil',
+                title: l10n.learningStyle,
               ),
               const SizedBox(height: 10),
               Container(
@@ -150,7 +153,7 @@ class _MatchDetailView extends ConsumerWidget {
                     ),
                   ),
                   title: Text(
-                    _lernstilLabel(match.lernstil!),
+                    _lernstilLabel(match.lernstil!, l10n),
                     style: tt.bodyMedium,
                   ),
                 ),
@@ -160,9 +163,9 @@ class _MatchDetailView extends ConsumerWidget {
 
             // ── Gemeinsame Zeitfenster ───────────────────────────────────
             if (match.ueberschneidungen.isNotEmpty) ...[
-              const _SectionHeader(
+              _SectionHeader(
                 icon: Icons.schedule_outlined,
-                title: 'Gemeinsame Zeitfenster',
+                title: l10n.commonTimeSlots,
               ),
               const SizedBox(height: 10),
               ...match.ueberschneidungen.map(
@@ -215,10 +218,10 @@ class _MatchDetailView extends ConsumerWidget {
     );
   }
 
-  String _lernstilLabel(String l) => const {
-        'still': 'Ruhig / Still',
-        'gemischt': 'Gemischt',
-        'diskutierend': 'Diskutierend',
+  String _lernstilLabel(String l, AppLocalizations l10n) => {
+        'still': l10n.lernstilStill,
+        'gemischt': l10n.lernstilGemischt,
+        'diskutierend': l10n.lernstilDiskutierend,
       }[l] ?? l;
 
   String _capitalize(String s) =>
@@ -234,20 +237,22 @@ class _ActionButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Akzeptiertes Match → Chat
+    final l10n = AppLocalizations.of(context);
+
+    // Accepted match → chat
     if (match.isAccepted) {
       return FilledButton.icon(
         icon: const Icon(Icons.chat_rounded),
-        label: const Text('Chat starten'),
+        label: Text(l10n.startChat),
         onPressed: () => context.push('/chat/${match.matchId}'),
       );
     }
 
-    // Anfrage von mir gesendet → warten
+    // Request sent by me → waiting
     if (match.isPending && match.iRequested) {
       return FilledButton.icon(
         icon: const Icon(Icons.hourglass_empty_rounded),
-        label: const Text('Anfrage gesendet – warte auf Bestätigung'),
+        label: Text(l10n.requestSentWaiting),
         onPressed: null,
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.muted.withValues(alpha: 0.15),
@@ -256,19 +261,19 @@ class _ActionButton extends ConsumerWidget {
       );
     }
 
-    // Eingehende Anfrage → annehmen / ablehnen
+    // Incoming request → accept / decline
     if (match.isPending && !match.iRequested) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FilledButton.icon(
             icon: const Icon(Icons.check_rounded),
-            label: const Text('Anfrage annehmen'),
+            label: Text(l10n.acceptRequest),
             onPressed: () async {
               final ok = await ref.read(matchesProvider.notifier).acceptRequest(match.matchId);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(ok ? 'Match bestätigt!' : 'Fehler beim Bestätigen')),
+                  SnackBar(content: Text(ok ? l10n.matchConfirmed : l10n.confirmErrorMsg)),
                 );
                 if (ok) context.go('/matches');
               }
@@ -277,7 +282,7 @@ class _ActionButton extends ConsumerWidget {
           const SizedBox(height: 8),
           OutlinedButton.icon(
             icon: const Icon(Icons.close_rounded),
-            label: const Text('Ablehnen'),
+            label: Text(l10n.decline),
             onPressed: () async {
               final ok = await ref.read(matchesProvider.notifier).declineRequest(match.matchId);
               if (context.mounted) {
@@ -290,15 +295,15 @@ class _ActionButton extends ConsumerWidget {
       );
     }
 
-    // Vorschlag → Anfrage senden
+    // Suggestion → send request
     return FilledButton.icon(
       icon: const Icon(Icons.person_add_rounded),
-      label: const Text('Match-Anfrage senden'),
+      label: Text(l10n.sendMatchRequest),
       onPressed: () async {
         final ok = await ref.read(matchesProvider.notifier).sendRequest(match.matchId);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(ok ? 'Anfrage gesendet!' : 'Fehler beim Senden')),
+            SnackBar(content: Text(ok ? l10n.requestSentSuccess : l10n.requestSentError)),
           );
           if (ok) context.go('/matches');
         }
@@ -343,14 +348,15 @@ class _ScoreBadge extends StatelessWidget {
     return AppColors.warning;
   }
 
-  String get _label {
-    if (score >= 70) return 'Sehr gutes Match';
-    if (score >= 40) return 'Gutes Match';
-    return 'Mäßiges Match';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final label = score >= 70
+        ? l10n.scoreVeryGood
+        : score >= 40
+            ? l10n.scoreGood
+            : l10n.scoreMedium;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       decoration: BoxDecoration(
@@ -370,7 +376,7 @@ class _ScoreBadge extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            _label,
+            label,
             style: TextStyle(
               fontWeight: FontWeight.w600,
               color: _color,

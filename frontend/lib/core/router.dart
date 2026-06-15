@@ -8,10 +8,12 @@ import '../features/auth/register_screen.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/matching/match_detail_screen.dart';
 import '../features/matching/match_list_screen.dart';
+import '../features/chat/unread_chats_provider.dart';
 import '../features/notifications/notifications_provider.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/sessions/sessions_screen.dart';
 import 'app_colors.dart';
+import 'app_localizations.dart';
 
 class _RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -124,6 +126,7 @@ class _MainScaffoldState extends ConsumerState<_MainScaffold> {
   @override
   Widget build(BuildContext context) {
     final hasUnread = ref.watch(notificationsProvider).unreadCount > 0;
+    final hasUnreadChats = ref.watch(unreadChatsProvider).isNotEmpty;
     final goingRight = _currentIndex > _prevIndex;
 
     return Scaffold(
@@ -153,6 +156,7 @@ class _MainScaffoldState extends ConsumerState<_MainScaffold> {
       bottomNavigationBar: _StyledNavBar(
         selectedIndex: _currentIndex,
         hasProfileBadge: hasUnread,
+        hasMatchesBadge: hasUnreadChats,
         onTap: (index) {
           switch (index) {
             case 0:
@@ -168,16 +172,41 @@ class _MainScaffoldState extends ConsumerState<_MainScaffold> {
   }
 }
 
-class _StyledNavBar extends StatelessWidget {
+class _StyledNavBar extends ConsumerWidget {
   final int selectedIndex;
   final bool hasProfileBadge;
+  final bool hasMatchesBadge;
   final ValueChanged<int> onTap;
 
   const _StyledNavBar({
     required this.selectedIndex,
     required this.hasProfileBadge,
+    required this.hasMatchesBadge,
     required this.onTap,
   });
+
+  Widget _matchesIcon({required bool selected, required bool badge}) {
+    final icon = Icon(selected ? Icons.people : Icons.people_outline);
+    if (!badge) return icon;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        icon,
+        Positioned(
+          right: -3,
+          top: -3,
+          child: Container(
+            width: 9,
+            height: 9,
+            decoration: const BoxDecoration(
+              color: AppColors.error,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _profileIcon({required bool selected, required bool badge}) {
     final icon = Icon(selected ? Icons.person : Icons.person_outline);
@@ -203,7 +232,8 @@ class _StyledNavBar extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.cardWhite,
@@ -219,24 +249,23 @@ class _StyledNavBar extends StatelessWidget {
         selectedIndex: selectedIndex,
         onDestinationSelected: onTap,
         destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Matches',
+          NavigationDestination(
+            icon: _matchesIcon(selected: false, badge: hasMatchesBadge),
+            selectedIcon: _matchesIcon(selected: true, badge: hasMatchesBadge),
+            label: l10n.navMatches,
           ),
           NavigationDestination(
             icon: _profileIcon(selected: false, badge: hasProfileBadge),
             selectedIcon: _profileIcon(selected: true, badge: hasProfileBadge),
-            label: 'Profil',
+            label: l10n.navProfile,
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.calendar_today_outlined),
-            selectedIcon: Icon(Icons.calendar_today),
-            label: 'Termine',
+          NavigationDestination(
+            icon: const Icon(Icons.calendar_today_outlined),
+            selectedIcon: const Icon(Icons.calendar_today),
+            label: l10n.navSessions,
           ),
         ],
       ),
     );
   }
 }
-

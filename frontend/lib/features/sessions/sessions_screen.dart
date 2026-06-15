@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_localizations.dart';
 import '../../core/time_picker_utils.dart';
 import '../../shared/models/match.dart';
 import '../../shared/models/room.dart';
@@ -28,18 +29,15 @@ Map<DateTime, Color> _buildMarkedDays(
     List<StudySession> sessions, List<AppNotification> notifications) {
   final map = <DateTime, Color>{};
 
-  // Sessions: green (confirmed) or yellow (pending edit).
   for (final s in sessions) {
     if (s.status == 'abgesagt') continue;
     final key = _dateOnly(s.dateTime);
     final color = s.hasPendingEdit ? AppColors.warning : AppColors.success;
-    // Priority: yellow > green
     if (!map.containsKey(key) || map[key] == AppColors.success) {
       map[key] = color;
     }
   }
 
-  // Unread cancellation notifications → red, overrides everything.
   final dateRe = RegExp(r'(\d{2})\.(\d{2})\.(\d{4})');
   for (final n in notifications) {
     if (n.isRead || n.title != 'Termin abgesagt') continue;
@@ -61,19 +59,20 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
   _GroupOrder _sortOrder = _GroupOrder.bevorstehend;
   DateTime? _filterDay;
 
-  static const _sortLabels = {
-    _GroupOrder.bevorstehend: 'Bevorstehend zuerst',
-    _GroupOrder.vergangen: 'Vergangen zuerst',
-    _GroupOrder.angefragt: 'Angefragt zuerst',
-  };
-
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final state = ref.watch(sessionsProvider);
+
+    final sortLabels = {
+      _GroupOrder.bevorstehend: l10n.sortUpcoming,
+      _GroupOrder.vergangen: l10n.sortPast,
+      _GroupOrder.angefragt: l10n.sortRequested,
+    };
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Meine Termine'),
+        title: Text(l10n.mySessions),
         actions: [
           DropdownButtonHideUnderline(
             child: DropdownButton<_GroupOrder>(
@@ -82,7 +81,7 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
               items: _GroupOrder.values
                   .map((o) => DropdownMenuItem(
                         value: o,
-                        child: Text(_sortLabels[o]!,
+                        child: Text(sortLabels[o]!,
                             style: const TextStyle(fontSize: 14)),
                       ))
                   .toList(),
@@ -138,7 +137,7 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
           // ── Session List ───────────────────────────────────────────────
           Expanded(
             child: state.isLoading
-                ? const LoadingIndicator(message: 'Termine laden…')
+                ? LoadingIndicator(message: l10n.loadingSessions)
                 : state.error != null && state.sessions.isEmpty
                     ? ErrorView(
                         message: state.error!,
@@ -168,7 +167,7 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateDialog(context, ref),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Neuer Termin'),
+        label: Text(l10n.newSession),
       ),
     );
   }
@@ -199,8 +198,9 @@ class _SessionsScreenState extends ConsumerState<SessionsScreen> {
                 raumId: raumId,
               );
           if (ok && context.mounted) {
+            final l10n = AppLocalizations.of(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Termin erstellt!')),
+              SnackBar(content: Text(l10n.sessionCreated)),
             );
           }
         },
@@ -226,25 +226,23 @@ class _MiniCalendar extends StatelessWidget {
     this.onClearFilter,
   });
 
-  static const _dayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-  static const _monthNames = [
-    '',
-    'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-  ];
 
   int _daysInMonth(int year, int month) =>
       DateTime(year, month + 1, 0).day;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final today = DateTime.now();
     final year = selectedDay.year;
     final month = selectedDay.month;
-    final firstWeekday = DateTime(year, month, 1).weekday; // 1=Mo … 7=So
+    final firstWeekday = DateTime(year, month, 1).weekday;
     final totalDays = _daysInMonth(year, month);
     final offset = firstWeekday - 1;
     final tt = Theme.of(context).textTheme;
+
+    final dayLabels = l10n.calendarDayLabels;
+    final monthNames = l10n.calendarMonthNames;
 
     return Container(
       decoration: BoxDecoration(
@@ -266,7 +264,7 @@ class _MiniCalendar extends StatelessWidget {
           Row(
             children: [
               Text(
-                '${_monthNames[month]} $year',
+                '${monthNames[month]} $year',
                 style: tt.titleMedium,
               ),
               if (filterDay != null)
@@ -275,7 +273,7 @@ class _MiniCalendar extends StatelessWidget {
                     child: GestureDetector(
                       onTap: onClearFilter,
                       child: Text(
-                        'Alle Termine wieder anzeigen',
+                        l10n.showAllSessions,
                         style: tt.bodySmall?.copyWith(
                           color: AppColors.primary,
                           fontSize: 13,
@@ -307,7 +305,7 @@ class _MiniCalendar extends StatelessWidget {
 
           // Day headers
           Row(
-            children: _dayLabels.map((d) {
+            children: dayLabels.map((d) {
               return Expanded(
                 child: Text(
                   d,
@@ -385,7 +383,7 @@ class _MiniCalendar extends StatelessWidget {
               selectedDay.year != DateTime.now().year) ...[
             const SizedBox(height: 8),
             Text(
-              _formatDate(selectedDay),
+              _formatDate(selectedDay, l10n),
               style: tt.bodySmall?.copyWith(color: AppColors.primary),
             ),
           ],
@@ -394,12 +392,10 @@ class _MiniCalendar extends StatelessWidget {
     );
   }
 
-  String _formatDate(DateTime d) {
-    const weekdays = [
-      '', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag',
-      'Samstag', 'Sonntag',
-    ];
-    return '${weekdays[d.weekday]}, ${d.day}. ${_monthNames[d.month]} ${d.year}';
+  String _formatDate(DateTime d, AppLocalizations l10n) {
+    final weekdays = l10n.calendarWeekdayNames;
+    final monthNames = l10n.calendarMonthNames;
+    return '${weekdays[d.weekday]}, ${d.day}. ${monthNames[d.month]} ${d.year}';
   }
 }
 
@@ -410,6 +406,7 @@ class _CalendarLegend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final style = Theme.of(context)
         .textTheme
         .labelSmall
@@ -420,15 +417,15 @@ class _CalendarLegend extends StatelessWidget {
       children: [
         _LegendDot(color: AppColors.success),
         const SizedBox(width: 4),
-        Text('Termin', style: style),
+        Text(l10n.legendSession, style: style),
         const SizedBox(width: 16),
         _LegendDot(color: AppColors.warning),
         const SizedBox(width: 4),
-        Text('Änderung offen', style: style),
+        Text(l10n.legendPending, style: style),
         const SizedBox(width: 16),
         _LegendDot(color: AppColors.error),
         const SizedBox(width: 4),
-        Text('Abgesagt', style: style),
+        Text(l10n.legendCancelled, style: style),
       ],
     );
   }
@@ -477,6 +474,7 @@ class _NavButton extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final tt = Theme.of(context).textTheme;
     return ListView(
       padding: const EdgeInsets.all(32),
@@ -504,10 +502,10 @@ class _EmptyState extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 20),
-              Text('Noch keine Termine', style: tt.titleMedium),
+              Text(l10n.noSessions, style: tt.titleMedium),
               const SizedBox(height: 8),
               Text(
-                'Erstelle einen neuen Lerntermin\nmit einem deiner Matches.',
+                l10n.noSessionsSub,
                 textAlign: TextAlign.center,
                 style: tt.bodySmall,
               ),
@@ -534,6 +532,7 @@ class _SessionList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final requested = sessions.where((s) => s.isRequested).toList();
     final upcoming =
         sessions.where((s) => !s.isRequested && s.isUpcoming).toList();
@@ -541,31 +540,22 @@ class _SessionList extends StatelessWidget {
         sessions.where((s) => !s.isRequested && !s.isUpcoming).toList();
 
     List<({String title, List<StudySession> items, bool isPast})> groups = [
-      (title: 'Bevorstehend', items: upcoming, isPast: false),
-      (title: 'Vergangen', items: past, isPast: true),
-      (title: 'Angefragt', items: requested, isPast: false),
+      (title: l10n.groupUpcoming, items: upcoming, isPast: false),
+      (title: l10n.groupPast, items: past, isPast: true),
+      (title: l10n.groupRequested, items: requested, isPast: false),
     ];
 
     groups.sort((a, b) {
       int rank(_GroupOrder o, String title) {
+        final upcoming = l10n.groupUpcoming;
+        final past = l10n.groupPast;
+        final requested = l10n.groupRequested;
         if (o == _GroupOrder.bevorstehend) {
-          return title == 'Bevorstehend'
-              ? 0
-              : title == 'Angefragt'
-                  ? 1
-                  : 2;
+          return title == upcoming ? 0 : title == requested ? 1 : 2;
         } else if (o == _GroupOrder.vergangen) {
-          return title == 'Vergangen'
-              ? 0
-              : title == 'Bevorstehend'
-                  ? 1
-                  : 2;
+          return title == past ? 0 : title == upcoming ? 1 : 2;
         } else {
-          return title == 'Angefragt'
-              ? 0
-              : title == 'Bevorstehend'
-                  ? 1
-                  : 2;
+          return title == requested ? 0 : title == upcoming ? 1 : 2;
         }
       }
 
@@ -589,7 +579,7 @@ class _SessionList extends StatelessWidget {
         children: [
           Center(
             child: Text(
-              'Keine Termine an diesem Tag.',
+              l10n.noSessionsOnDay,
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -633,6 +623,7 @@ class _SessionCard extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     final hasPendingIncoming = session.hasPendingEdit && !session.iProposedEdit;
     final hasPendingOutgoing = session.hasPendingEdit && session.iProposedEdit;
+    final l10n = AppLocalizations.of(context);
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     Color cardColor = isPast
@@ -669,7 +660,7 @@ class _SessionCard extends StatelessWidget {
                       color: isPast ? AppColors.muted : AppColors.primary),
                 ),
                 Text(
-                  _monthAbbr(dt.month),
+                  _monthAbbr(dt.month, l10n),
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
                       color: isPast ? AppColors.muted : AppColors.primary),
                 ),
@@ -685,7 +676,7 @@ class _SessionCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _timeRange(dt, session.uhrzeitEnde),
+                    _timeRange(dt, session.uhrzeitEnde, l10n),
                     style: tt.bodySmall?.copyWith(color: isPast ? AppColors.muted : AppColors.navy),
                   ),
                   const SizedBox(height: 4),
@@ -700,8 +691,8 @@ class _SessionCard extends StatelessWidget {
                             color: AppColors.warning.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Text('Änderung angefragt',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning)),
+                          child: Text(l10n.pendingChange,
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning)),
                         ),
                       ],
                       if (hasPendingOutgoing) ...[
@@ -717,7 +708,7 @@ class _SessionCard extends StatelessWidget {
                             children: [
                               Icon(Icons.hourglass_empty_rounded, size: 10, color: AppColors.primary),
                               const SizedBox(width: 4),
-                              Text('Ausstehend',
+                              Text(l10n.pendingOutgoing,
                                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary)),
                             ],
                           ),
@@ -746,24 +737,14 @@ class _SessionCard extends StatelessWidget {
 
   String _fmt2(int n) => n.toString().padLeft(2, '0');
 
-  String _timeRange(DateTime dt, String? ende) {
+  String _timeRange(DateTime dt, String? ende, AppLocalizations l10n) {
     final start = '${_fmt2(dt.hour)}:${_fmt2(dt.minute)}';
-    if (ende == null || ende.length < 5) return '${_weekday(dt.weekday)}, $start Uhr';
-    return '${_weekday(dt.weekday)}, $start – ${ende.substring(0, 5)} Uhr';
+    final wd = l10n.weekdayAbbrs[dt.weekday];
+    if (ende == null || ende.length < 5) return '$wd, $start Uhr';
+    return '$wd, $start – ${ende.substring(0, 5)} Uhr';
   }
 
-  String _monthAbbr(int m) {
-    const months = [
-      '', 'Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez',
-    ];
-    return months[m];
-  }
-
-  String _weekday(int w) {
-    const days = ['', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-    return days[w];
-  }
+  String _monthAbbr(int m, AppLocalizations l10n) => l10n.monthAbbrs[m];
 }
 
 // ── Session Detail Sheet ──────────────────────────────────────────────────────
@@ -808,6 +789,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Future<void> _showCancelDialog(BuildContext context, String sessionId) async {
+    final l10n = AppLocalizations.of(context);
     final reasonCtrl = TextEditingController();
     String? validationError;
 
@@ -816,19 +798,19 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Termin absagen'),
+          title: Text(l10n.cancelSessionTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Möchtest du diesen Termin wirklich absagen?'),
+              Text(l10n.cancelSessionConfirm),
               const SizedBox(height: 16),
               TextField(
                 controller: reasonCtrl,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  labelText: 'Grund (optional)',
-                  hintText: 'z. B. Ich kann leider nicht…',
+                  labelText: l10n.cancelReason,
+                  hintText: l10n.cancelReasonHint,
                   errorText: validationError,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -843,7 +825,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Zurück'),
+              child: Text(l10n.back),
             ),
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: AppColors.error),
@@ -865,11 +847,11 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                 if (context.mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(ok ? 'Termin abgesagt.' : 'Fehler beim Absagen.'),
+                    content: Text(ok ? l10n.sessionCancelled : l10n.cancelError),
                   ));
                 }
               },
-              child: const Text('Absagen'),
+              child: Text(l10n.cancelButton),
             ),
           ],
         ),
@@ -880,6 +862,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final s = widget.session;
     final tt = Theme.of(context).textTheme;
     final isPast = !s.isUpcoming;
@@ -907,11 +890,11 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: Text('Termin mit ${s.partnerAlias}', style: tt.titleLarge)),
+              Expanded(child: Text(l10n.sessionWithPartner(s.partnerAlias), style: tt.titleLarge)),
               if (canEdit)
                 IconButton(
                   icon: const Icon(Icons.edit_outlined),
-                  tooltip: 'Änderung vorschlagen',
+                  tooltip: l10n.proposeChange,
                   onPressed: () => setState(() => _editing = !_editing),
                 ),
               IconButton(
@@ -922,7 +905,6 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
           ),
           const SizedBox(height: 16),
 
-          // Aktuelle Daten
           _InfoRow(icon: Icons.calendar_today_rounded, label: _fmtDate(s.datum)),
           const SizedBox(height: 8),
           _InfoRow(
@@ -934,7 +916,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
           const SizedBox(height: 8),
           _StatusChip(status: s.status),
 
-          // Eingehende Terminanfrage
+          // Incoming session request
           if (isIncomingRequest) ...[
             const SizedBox(height: 16),
             Container(
@@ -947,12 +929,12 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.schedule_rounded, size: 16, color: AppColors.warning),
-                      SizedBox(width: 8),
-                      Text('Terminanfrage',
-                          style: TextStyle(
+                      const Icon(Icons.schedule_rounded, size: 16, color: AppColors.warning),
+                      const SizedBox(width: 8),
+                      Text(l10n.sessionRequest,
+                          style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               color: AppColors.warning,
                               fontSize: 13)),
@@ -960,7 +942,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${s.partnerAlias} möchte einen Termin mit dir vereinbaren.',
+                    l10n.sessionRequestFrom(s.partnerAlias),
                     style: tt.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -968,8 +950,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.error),
+                          style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
                           onPressed: () async {
                             final ok = await ref
                                 .read(sessionsProvider.notifier)
@@ -977,12 +958,10 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                             if (context.mounted) {
                               Navigator.of(context).pop();
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text(ok
-                                      ? 'Terminanfrage abgelehnt.'
-                                      : 'Fehler beim Ablehnen.')));
+                                  content: Text(ok ? l10n.declineSessionError : l10n.declineSessionError)));
                             }
                           },
-                          child: const Text('Ablehnen'),
+                          child: Text(l10n.decline),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -995,12 +974,10 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                             if (context.mounted) {
                               Navigator.of(context).pop();
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                  content: Text(ok
-                                      ? 'Termin angenommen!'
-                                      : 'Fehler beim Annehmen.')));
+                                  content: Text(ok ? l10n.acceptedSession : l10n.acceptSessionError)));
                             }
                           },
-                          child: const Text('Annehmen'),
+                          child: Text(l10n.accept),
                         ),
                       ),
                     ],
@@ -1010,7 +987,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
             ),
           ],
 
-          // Eingehende Änderungsanfrage
+          // Incoming change request
           if (isIncomingEdit) ...[
             const SizedBox(height: 16),
             Container(
@@ -1023,20 +1000,20 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.edit_notifications_outlined, size: 16, color: AppColors.warning),
-                      SizedBox(width: 8),
-                      Text('Änderungsanfrage',
-                          style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.warning, fontSize: 13)),
+                      const Icon(Icons.edit_notifications_outlined, size: 16, color: AppColors.warning),
+                      const SizedBox(width: 8),
+                      Text(l10n.changeRequest,
+                          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.warning, fontSize: 13)),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text('Neues Datum: ${_fmtDate(s.proposedDatum!)}', style: tt.bodySmall),
+                  Text(l10n.proposedDate(_fmtDate(s.proposedDatum!)), style: tt.bodySmall),
                   Text(
                     s.proposedUhrzeitEnde != null
-                        ? 'Neue Uhrzeit: ${_fmtTime(s.proposedUhrzeit!)} – ${_fmtTime(s.proposedUhrzeitEnde!)} Uhr'
-                        : 'Neue Uhrzeit: ${_fmtTime(s.proposedUhrzeit!)} Uhr',
+                        ? l10n.proposedTimeRange(_fmtTime(s.proposedUhrzeit!), _fmtTime(s.proposedUhrzeitEnde!))
+                        : '${l10n.proposeNewTime}: ${_fmtTime(s.proposedUhrzeit!)} Uhr',
                     style: tt.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -1049,11 +1026,13 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                             final ok = await ref.read(sessionsProvider.notifier).declineEdit(s.id);
                             if (context.mounted) {
                               Navigator.of(context).pop();
-                              if (!ok) { ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Fehler beim Ablehnen'))); }
+                              if (!ok) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(l10n.declineSessionError)));
+                              }
                             }
                           },
-                          child: const Text('Ablehnen'),
+                          child: Text(l10n.decline),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -1063,11 +1042,13 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                             final ok = await ref.read(sessionsProvider.notifier).acceptEdit(s.id);
                             if (context.mounted) {
                               Navigator.of(context).pop();
-                              if (ok) { ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Termin aktualisiert!'))); }
+                              if (ok) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(l10n.sessionCreated)));
+                              }
                             }
                           },
-                          child: const Text('Annehmen'),
+                          child: Text(l10n.accept),
                         ),
                       ),
                     ],
@@ -1077,7 +1058,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
             ),
           ],
 
-          // Ausgehende Änderungsanfrage
+          // Outgoing change request pending
           if (s.hasPendingEdit && s.iProposedEdit) ...[
             const SizedBox(height: 16),
             Container(
@@ -1092,7 +1073,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Änderungsanfrage gesendet – warte auf Bestätigung.',
+                      l10n.changeRequestSent,
                       style: tt.bodySmall?.copyWith(color: AppColors.primary),
                     ),
                   ),
@@ -1101,12 +1082,12 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
             ),
           ],
 
-          // Bearbeitungsformular
+          // Edit form
           if (_editing) ...[
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 8),
-            Text('Neue Zeit vorschlagen', style: tt.titleSmall),
+            Text(l10n.proposeNewTime, style: tt.titleSmall),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1132,7 +1113,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                 Expanded(
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.access_time_rounded, size: 16),
-                    label: Text('Von: ${_fmtTimeTod(_newTime)}'),
+                    label: Text('${l10n.from}: ${_fmtTimeTod(_newTime)}'),
                     onPressed: () async {
                       final t = await showTimePicker24h(context, initialTime: _newTime);
                       if (t != null) setState(() => _newTime = t);
@@ -1143,7 +1124,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                 Expanded(
                   child: OutlinedButton.icon(
                     icon: const Icon(Icons.access_time_filled_rounded, size: 16),
-                    label: Text(_newTimeEnde != null ? 'Bis: ${_fmtTimeTod(_newTimeEnde!)}' : 'Bis: –'),
+                    label: Text(_newTimeEnde != null ? '${l10n.until}: ${_fmtTimeTod(_newTimeEnde!)}' : '${l10n.until}: –'),
                     onPressed: () async {
                       final t = await showTimePicker24h(context, initialTime: _newTimeEnde ?? _newTime);
                       if (t != null) setState(() => _newTimeEnde = t);
@@ -1164,11 +1145,11 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                 if (context.mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(ok ? 'Änderungsanfrage gesendet!' : 'Fehler beim Senden')),
+                    SnackBar(content: Text(ok ? l10n.changeRequestSentSuccess : l10n.changeRequestError)),
                   );
                 }
               },
-              child: const Text('Änderung anfragen'),
+              child: Text(l10n.requestChange),
             ),
           ],
           if (canCancel) ...[
@@ -1181,7 +1162,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                 side: const BorderSide(color: AppColors.error),
               ),
               icon: const Icon(Icons.cancel_outlined, size: 18),
-              label: const Text('Termin absagen'),
+              label: Text(l10n.cancelSession),
               onPressed: () => _showCancelDialog(context, s.id),
             ),
           ],
@@ -1195,7 +1176,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                 side: const BorderSide(color: AppColors.error),
               ),
               icon: const Icon(Icons.delete_outline_rounded, size: 18),
-              label: const Text('Termin löschen'),
+              label: Text(l10n.deleteSession),
               onPressed: () async {
                 final ok = await ref
                     .read(sessionsProvider.notifier)
@@ -1203,11 +1184,7 @@ class _SessionDetailSheetState extends ConsumerState<_SessionDetailSheet> {
                 if (context.mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(ok
-                          ? 'Termin gelöscht.'
-                          : 'Fehler beim Löschen.'),
-                    ),
+                    SnackBar(content: Text(ok ? l10n.sessionDeleted : l10n.deleteError)),
                   );
                 }
               },
@@ -1244,11 +1221,12 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final (label, color) = switch (status) {
-      'bestaetigt' => ('Bestätigt', AppColors.success),
-      'abgesagt' => ('Abgesagt', AppColors.error),
-      'angefragt' => ('Angefragt', AppColors.warning),
-      _ => ('Geplant', AppColors.primary),
+      'bestaetigt' => (l10n.statusConfirmed, AppColors.success),
+      'abgesagt' => (l10n.statusCancelled, AppColors.error),
+      'angefragt' => (l10n.statusRequested, AppColors.warning),
+      _ => (l10n.statusPlanned, AppColors.primary),
     };
 
     return Container(
@@ -1308,9 +1286,10 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Future<void> _save() async {
+    final l10n = AppLocalizations.of(context);
     if (_selectedMatch == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bitte wähle einen Lernpartner aus')),
+        SnackBar(content: Text(l10n.selectPartnerFirst)),
       );
       return;
     }
@@ -1330,6 +1309,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final rooms = ref.watch(roomsProvider);
     final tt = Theme.of(context).textTheme;
 
@@ -1359,7 +1339,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
           Row(
             children: [
               Expanded(
-                child: Text('Neuer Lerntermin', style: tt.headlineSmall),
+                child: Text(l10n.newStudySession, style: tt.headlineSmall),
               ),
               IconButton(
                 icon: const Icon(Icons.close_rounded),
@@ -1381,10 +1361,10 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
                 children: [
                   Icon(Icons.info_outline_rounded,
                       size: 18, color: AppColors.primary),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Keine Matches gefunden. Vervollständige zuerst dein Profil.',
+                      l10n.noMatchesForSession,
                       style: TextStyle(
                           color: AppColors.primary,
                           fontSize: 13,
@@ -1396,11 +1376,11 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
             )
           else
             DropdownButtonFormField<Match>(
-              decoration: const InputDecoration(
-                labelText: 'Lernpartner',
-                prefixIcon: Icon(Icons.people_outlined),
+              decoration: InputDecoration(
+                labelText: l10n.studyPartner,
+                prefixIcon: const Icon(Icons.people_outlined),
               ),
-              hint: const Text('Partner auswählen'),
+              hint: Text(l10n.choosePartner),
               items: widget.matches
                   .map((m) => DropdownMenuItem(
                         value: m,
@@ -1412,7 +1392,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
 
           const SizedBox(height: 12),
 
-          // ── Datum & Uhrzeit ────────────────────────────────────────────
+          // ── Date & Time ────────────────────────────────────────────────
           Row(
             children: [
               Expanded(
@@ -1434,7 +1414,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.access_time_rounded, size: 18),
-                  label: Text('Von: ${_fmtTime(_selectedTime)}'),
+                  label: Text('${l10n.from}: ${_fmtTime(_selectedTime)}'),
                   onPressed: () async {
                     final t = await showTimePicker24h(context, initialTime: _selectedTime);
                     if (t != null) setState(() => _selectedTime = t);
@@ -1445,7 +1425,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
               Expanded(
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.access_time_filled_rounded, size: 18),
-                  label: Text(_selectedTimeEnde != null ? 'Bis: ${_fmtTime(_selectedTimeEnde!)}' : 'Bis: –'),
+                  label: Text(_selectedTimeEnde != null ? '${l10n.until}: ${_fmtTime(_selectedTimeEnde!)}' : '${l10n.until}: –'),
                   onPressed: () async {
                     final t = await showTimePicker24h(context, initialTime: _selectedTimeEnde ?? _selectedTime);
                     if (t != null) setState(() => _selectedTimeEnde = t);
@@ -1456,19 +1436,19 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
           ),
           const SizedBox(height: 12),
 
-          // ── Raum ───────────────────────────────────────────────────────
+          // ── Room ───────────────────────────────────────────────────────
           rooms.when(
             loading: () => LinearProgressIndicator(
               color: AppColors.primary,
             ),
             error: (_, __) => const SizedBox.shrink(),
             data: (roomList) => DropdownButtonFormField<Room>(
-              decoration: const InputDecoration(
-                labelText: 'Raum (optional)',
-                prefixIcon: Icon(Icons.room_outlined),
+              decoration: InputDecoration(
+                labelText: l10n.roomOptional,
+                prefixIcon: const Icon(Icons.room_outlined),
               ),
               items: [
-                const DropdownMenuItem(value: null, child: Text('Kein Raum')),
+                DropdownMenuItem(value: null, child: Text(l10n.noRoom)),
                 ...roomList.map((r) => DropdownMenuItem(
                       value: r,
                       child: Text(r.displayName),
@@ -1490,7 +1470,7 @@ class _CreateSessionSheetState extends ConsumerState<_CreateSessionSheet> {
                       color: Colors.white,
                     ),
                   )
-                : const Text('Termin erstellen'),
+                : Text(l10n.createSession),
           ),
         ],
       ),

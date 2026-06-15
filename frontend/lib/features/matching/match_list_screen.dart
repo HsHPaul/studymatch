@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_localizations.dart';
 import '../../features/auth/auth_provider.dart';
+import '../../features/chat/unread_chats_provider.dart';
 import '../../features/matching/matching_provider.dart';
 import '../../features/profile/profile_provider.dart';
 import '../../shared/models/match.dart';
@@ -42,6 +44,7 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
   }
 
   void _showChatPolicyDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
@@ -50,16 +53,14 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
           children: [
             Icon(Icons.info_outline_rounded, color: AppColors.primary),
             const SizedBox(width: 10),
-            const Text('Hinweis'),
+            Text(l10n.chatPolicyNotice),
           ],
         ),
-        content: const Text(
-          'Bleib respektvoll: Beleidigungen, Diskriminierung, Bedrohungen und unangemessene Inhalte sind im Chat nicht erlaubt.',
-        ),
+        content: Text(l10n.chatPolicyText),
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Verstanden'),
+            child: Text(l10n.understood),
           ),
         ],
       ),
@@ -68,6 +69,8 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+
     ref.listen<AuthState>(authProvider, (prev, next) {
       if (next.isAuthenticated && !(prev?.isAuthenticated ?? false)) {
         ref.read(matchesProvider.notifier).load();
@@ -76,20 +79,35 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
 
     final state = ref.watch(matchesProvider);
 
+    // Keep unread-chat provider in sync with accepted matches.
+    ref.listen(matchesProvider, (_, next) {
+      next.whenData((matches) {
+        final ids = matches.where((m) => m.isAccepted).map((m) => m.matchId).toList();
+        ref.read(unreadChatsProvider.notifier).updateWatched(ids);
+      });
+    });
+    state.whenData((matches) {
+      final ids = matches.where((m) => m.isAccepted).map((m) => m.matchId).toList();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(unreadChatsProvider.notifier).updateWatched(ids);
+      });
+    });
+
     return state.when(
       loading: () => Scaffold(
-        body: const LoadingIndicator(message: 'Lade Matches…'),
+        body: LoadingIndicator(message: l10n.loadingMatches),
       ),
       error: (e, _) {
         if (!ref.watch(authProvider).isAuthenticated) {
           return Scaffold(
-                body: const LoadingIndicator(message: 'Lade Matches…'),
+            body: LoadingIndicator(message: l10n.loadingMatches),
           );
         }
         return Scaffold(
-            appBar: AppBar(title: const Text('Matches')),
+          appBar: AppBar(title: Text(l10n.matchesTitle)),
           body: ErrorView(
-            message: 'Fehler beim Laden.',
+            message: l10n.errorLoading,
             onRetry: () => ref.read(matchesProvider.notifier).load(),
           ),
         );
@@ -100,24 +118,24 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
         final suggestions = matches.where((m) => m.isSuggestion || (m.isPending && m.iRequested)).toList();
 
         return Scaffold(
-            appBar: AppBar(
-            title: const Text('Matches'),
+          appBar: AppBar(
+            title: Text(l10n.matchesTitle),
             actions: [
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
                 onPressed: () => ref.read(matchesProvider.notifier).load(),
-                tooltip: 'Aktualisieren',
+                tooltip: l10n.refresh,
               ),
             ],
             bottom: TabBar(
               controller: _tabController,
               tabs: [
-                const Tab(text: 'Angenommen'),
+                Tab(text: l10n.tabAccepted),
                 Tab(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('Anfragen'),
+                      Text(l10n.tabRequests),
                       if (incoming.isNotEmpty) ...[
                         const SizedBox(width: 6),
                         Container(
@@ -139,7 +157,7 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
                     ],
                   ),
                 ),
-                const Tab(text: 'Vorschläge'),
+                Tab(text: l10n.tabSuggestions),
               ],
             ),
           ),
@@ -149,8 +167,8 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
               _MatchTab(
                 matches: accepted,
                 emptyIcon: Icons.handshake_outlined,
-                emptyTitle: 'Noch keine bestätigten Matches',
-                emptySubtitle: 'Schicke Anfragen an passende Lernpartner\naus dem Vorschläge-Tab.',
+                emptyTitle: l10n.noAcceptedMatches,
+                emptySubtitle: l10n.noAcceptedMatchesSub,
               ),
               _IncomingTab(matches: incoming),
               _SuggestionsTab(
@@ -190,6 +208,7 @@ class _MatchTabState extends ConsumerState<_MatchTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final filtered = widget.matches
         .where((m) => m.scorePercent >= _currentMin)
         .toList();
@@ -204,7 +223,7 @@ class _MatchTabState extends ConsumerState<_MatchTab> {
               Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(
-                _currentMin == 0 ? 'Alle anzeigen' : 'Ab $_currentMin% Match',
+                _currentMin == 0 ? l10n.showAll : l10n.matchAbove(_currentMin),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: AppColors.primary,
                   fontWeight: FontWeight.w600,
@@ -217,7 +236,7 @@ class _MatchTabState extends ConsumerState<_MatchTab> {
                   textStyle: const TextStyle(fontSize: 12),
                 ),
                 onPressed: () => setState(() => _showFilter = !_showFilter),
-                child: Text(_showFilter ? 'Schließen' : 'Anpassen'),
+                child: Text(_showFilter ? l10n.close : l10n.adjustFilter),
               ),
             ],
           ),
@@ -226,7 +245,7 @@ class _MatchTabState extends ConsumerState<_MatchTab> {
           _FilterPanel(
             currentMin: _currentMin,
             isSaving: false,
-            buttonLabel: 'Anwenden',
+            buttonLabel: l10n.filterApply,
             onChanged: (val) {
               setState(() {
                 _currentMin = val;
@@ -239,10 +258,10 @@ class _MatchTabState extends ConsumerState<_MatchTab> {
               ? _EmptyState(
                   icon: widget.emptyIcon,
                   title: _currentMin > 0
-                      ? 'Keine Matches ab $_currentMin%'
+                      ? l10n.noMatchesAbove(_currentMin)
                       : widget.emptyTitle,
                   subtitle: _currentMin > 0
-                      ? 'Senke den Mindest-Prozentwert.'
+                      ? l10n.lowerThreshold
                       : widget.emptySubtitle,
                 )
               : RefreshIndicator(
@@ -279,13 +298,14 @@ class _SuggestionsTabState extends ConsumerState<_SuggestionsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final profile = ref.watch(profileProvider).profile;
     final currentMin = profile?.minMatchPercent ?? 0;
     final isSaving = ref.watch(profileProvider).isSaving;
 
     return Column(
       children: [
-        // Filter-Leiste
+        // Filter bar
         Container(
           color: AppColors.cardWhite,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -294,7 +314,7 @@ class _SuggestionsTabState extends ConsumerState<_SuggestionsTab> {
               Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(
-                currentMin == 0 ? 'Alle anzeigen' : 'Ab $currentMin% Match',
+                currentMin == 0 ? l10n.showAll : l10n.matchAbove(currentMin),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: AppColors.primary,
                   fontWeight: FontWeight.w600,
@@ -307,7 +327,7 @@ class _SuggestionsTabState extends ConsumerState<_SuggestionsTab> {
                   textStyle: const TextStyle(fontSize: 12),
                 ),
                 onPressed: () => setState(() => _showFilter = !_showFilter),
-                child: Text(_showFilter ? 'Schließen' : 'Anpassen'),
+                child: Text(_showFilter ? l10n.close : l10n.adjustFilter),
               ),
             ],
           ),
@@ -316,6 +336,7 @@ class _SuggestionsTabState extends ConsumerState<_SuggestionsTab> {
           _FilterPanel(
             currentMin: currentMin,
             isSaving: isSaving,
+            buttonLabel: l10n.filterSave,
             onChanged: (val) async {
               final ok = await ref
                   .read(profileProvider.notifier)
@@ -331,11 +352,11 @@ class _SuggestionsTabState extends ConsumerState<_SuggestionsTab> {
               ? _EmptyState(
                   icon: Icons.search_rounded,
                   title: currentMin > 0
-                      ? 'Keine Vorschläge ab $currentMin%'
-                      : 'Keine Vorschläge gefunden',
+                      ? l10n.noSuggestionsAbove(currentMin)
+                      : l10n.noSuggestions,
                   subtitle: currentMin > 0
-                      ? 'Senke den Mindest-Prozentwert oder ergänze dein Profil.'
-                      : 'Trage Fächer und Verfügbarkeiten in dein Profil ein.',
+                      ? l10n.noSuggestionsLowerThreshold
+                      : l10n.noSuggestionsSub,
                   showLernstilHint: widget.showLernstilHint,
                 )
               : RefreshIndicator(
@@ -384,6 +405,7 @@ class _FilterPanelState extends State<_FilterPanel> {
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
 
     return Container(
       color: AppColors.primaryLight,
@@ -392,12 +414,12 @@ class _FilterPanelState extends State<_FilterPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Mindest-Match: ${_value.round()}%',
+            '${l10n.filterMinMatch} ${_value.round()}%',
             style: tt.titleSmall,
           ),
           const SizedBox(height: 4),
           Text(
-            'Nur Personen ab diesem Wert werden angezeigt – und umgekehrt.',
+            l10n.filterDescription,
             style: tt.bodySmall?.copyWith(color: AppColors.muted),
           ),
           Slider(
@@ -412,7 +434,7 @@ class _FilterPanelState extends State<_FilterPanel> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('0% (alle)', style: tt.bodySmall),
+              Text(l10n.allPercent, style: tt.bodySmall),
               Text('90%', style: tt.bodySmall),
             ],
           ),
@@ -446,11 +468,12 @@ class _IncomingTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     if (matches.isEmpty) {
-      return const _EmptyState(
+      return _EmptyState(
         icon: Icons.mark_email_unread_outlined,
-        title: 'Keine offenen Anfragen',
-        subtitle: 'Wenn jemand eine Match-Anfrage\nan dich sendet, erscheint sie hier.',
+        title: l10n.noOpenRequests,
+        subtitle: l10n.noOpenRequestsSub,
       );
     }
     return RefreshIndicator(
@@ -474,6 +497,7 @@ class _IncomingCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tt = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
 
     return Container(
       decoration: BoxDecoration(
@@ -535,12 +559,12 @@ class _IncomingCard extends ConsumerWidget {
                     final ok = await ref.read(matchesProvider.notifier).declineRequest(match.matchId);
                     if (!ok && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Fehler beim Ablehnen')),
+                        SnackBar(content: Text(l10n.declineError)),
                       );
                     }
                   },
                   style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
-                  child: const Text('Ablehnen'),
+                  child: Text(l10n.decline),
                 ),
               ),
               const SizedBox(width: 10),
@@ -550,11 +574,11 @@ class _IncomingCard extends ConsumerWidget {
                     final ok = await ref.read(matchesProvider.notifier).acceptRequest(match.matchId);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(ok ? '${match.alias} bestätigt!' : 'Fehler beim Bestätigen')),
+                        SnackBar(content: Text(ok ? l10n.confirmedAlias(match.alias) : l10n.confirmError)),
                       );
                     }
                   },
-                  child: const Text('Annehmen'),
+                  child: Text(l10n.accept),
                 ),
               ),
             ],
@@ -583,6 +607,7 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
     return ListView(
       padding: const EdgeInsets.all(32),
       children: [
@@ -616,7 +641,7 @@ class _EmptyState extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Dein Lernstil muss im Profil angegeben sein.',
+                          l10n.lernstilHint,
                           style: tt.bodySmall?.copyWith(color: AppColors.primary),
                         ),
                       ),
@@ -634,7 +659,7 @@ class _EmptyState extends StatelessWidget {
 
 // ── Match Card (Bestätigt & Vorschläge) ──────────────────────────────────────
 
-class _MatchCard extends StatelessWidget {
+class _MatchCard extends ConsumerWidget {
   final Match match;
 
   const _MatchCard({required this.match});
@@ -645,17 +670,20 @@ class _MatchCard extends StatelessWidget {
     return AppColors.warning;
   }
 
-  String _scoreLabel(int pct) {
-    if (pct >= 70) return 'Sehr gutes Match';
-    if (pct >= 40) return 'Gutes Match';
-    return 'Mäßiges Match';
+  String _scoreLabel(int pct, AppLocalizations l10n) {
+    if (pct >= 70) return l10n.scoreVeryGood;
+    if (pct >= 40) return l10n.scoreGood;
+    return l10n.scoreMedium;
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tt = Theme.of(context).textTheme;
+    final l10n = AppLocalizations.of(context);
     final score = match.scorePercent;
     final color = _scoreColor(score);
+    final hasUnread = match.isAccepted &&
+        ref.watch(unreadChatsProvider).contains(match.matchId);
 
     return Container(
       decoration: BoxDecoration(
@@ -696,9 +724,9 @@ class _MatchCard extends StatelessWidget {
                           color: AppColors.warning.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Text(
-                          'Anfrage gesendet',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning),
+                        child: Text(
+                          l10n.requestSent,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.warning),
                         ),
                       )
                     else
@@ -719,14 +747,32 @@ class _MatchCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.person_outline_rounded),
                   color: AppColors.primary,
-                  tooltip: 'Profil anzeigen',
+                  tooltip: l10n.showProfile,
                   onPressed: () => context.go('/matches/${match.userId}'),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.forum_rounded),
-                  color: AppColors.primary,
-                  tooltip: 'Chat öffnen',
-                  onPressed: () => context.go('/chat/${match.matchId}'),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.forum_rounded),
+                      color: hasUnread ? AppColors.error : AppColors.primary,
+                      tooltip: l10n.openChat,
+                      onPressed: () => context.go('/chat/${match.matchId}'),
+                    ),
+                    if (hasUnread)
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: Container(
+                          width: 9,
+                          height: 9,
+                          decoration: const BoxDecoration(
+                            color: AppColors.error,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ] else ...[
                 const SizedBox(width: 4),
@@ -739,7 +785,7 @@ class _MatchCard extends StatelessWidget {
                   _ScoreCircle(score: score, color: color),
                   const SizedBox(height: 4),
                   Text(
-                    _scoreLabel(score),
+                    _scoreLabel(score, l10n),
                     style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),

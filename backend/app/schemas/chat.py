@@ -15,3 +15,10 @@ class MessageResponse(OrmBase):
     sender_id: UUID
     content: str
     sent_at: datetime
+
+
+class LastMessageSummaryResponse(BaseModel):
+    match_id: UUID
+    last_message_id: UUID
+    last_sender_id: UUID
+    last_sent_at: datetime

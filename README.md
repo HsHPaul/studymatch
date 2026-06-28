@@ -95,8 +95,10 @@ Der Chat-Screen (`/chat/:matchId`) liegt außerhalb der `ShellRoute` und hat kei
 
 ### Bekannte Fixes / wichtige Hinweise
 - **bcrypt:** `passlib` durch direktes `bcrypt` ersetzt (`security.py`) — passlib 1.7.4 ist inkompatibel mit bcrypt 4.x
-- **401-Interceptor:** Bei abgelaufenem Token leitet die App automatisch zur Loginmaske (via `sessionExpiredProvider`)
+- **401-Interceptor:** Nur authentifizierte Requests (mit `Authorization`-Header) lösen Session-Expiry aus — unauthentifizierte 401s (z. B. beim App-Start vor dem Login) dürfen keinen frisch gespeicherten Token überschreiben
 - **sessionExpiredProvider-Reset:** `AuthNotifier._clearUserData()` setzt `sessionExpiredProvider` auf `false` zurück — nötig damit spätere 401s erneut erkannt werden
+- **register() clearUserData:** `AuthNotifier.register()` ruft wie `login()` `_clearUserData()` auf, bevor der neue Auth-State gesetzt wird — sauberer Provider-Zustand nach Registrierung
+- **Dialog-Navigator-Fix:** `_showChatPolicyDialog` in `MatchListScreen` nutzt den `dialogContext` des Dialog-Builders statt dem Screen-Context — verhindert, dass `Navigator.pop()` die ShellRoute statt den Dialog schließt (GoRouter-Problem mit verschachtelten Navigatoren)
 - **Alembic:** `alembic.ini` hat leeres `sqlalchemy.url` — URL kommt aus `.env` über `alembic/env.py`
 - **Provider-Reset:** `AuthNotifier._clearUserData()` invalidiert alle nutzerspezifischen Provider bei Login/Logout
 - **Auth-Hint-Fix:** `MatchListScreen` prüft Auth-State in Fehlerfall, triggert Reload via `ref.listen` wenn Auth bereit — verhindert falschen 401 beim App-Start
@@ -125,6 +127,7 @@ Der Chat-Screen (`/chat/:matchId`) liegt außerhalb der `ShellRoute` und hat kei
 | POST | `/api/v1/matches/{id}/request` | Match-Anfrage senden |
 | POST | `/api/v1/matches/{id}/accept` | Match-Anfrage annehmen |
 | POST | `/api/v1/matches/{id}/decline` | Match-Anfrage ablehnen |
+| GET | `/api/v1/chat/unread` | Letzte Nachricht pro akzeptiertem Match (für Ungelesen-Badge) |
 | GET | `/api/v1/chat/{match_id}/messages` | Chatverlauf laden |
 | POST | `/api/v1/chat/{match_id}/messages` | Nachricht senden |
 | WS | `/api/v1/chat/ws/{match_id}` | Echtzeit-Chat |

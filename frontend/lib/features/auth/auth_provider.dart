@@ -110,6 +110,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final res = await _publicDio.post('/auth/register', data: data);
       final token = res.data['access_token'] as String;
       await _storage.write(key: tokenKey, value: token);
+      _clearUserData();
       state = AuthState(token: token);
     } on DioException catch (e) {
       final detail = e.response?.data?['detail'];

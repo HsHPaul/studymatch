@@ -47,7 +47,7 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
     final l10n = AppLocalizations.of(context);
     showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
@@ -59,7 +59,7 @@ class _MatchListScreenState extends ConsumerState<MatchListScreen>
         content: Text(l10n.chatPolicyText),
         actions: [
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: Text(l10n.understood),
           ),
         ],

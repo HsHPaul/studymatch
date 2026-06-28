@@ -33,7 +33,11 @@ final dioProvider = Provider<Dio>((ref) {
       handler.next(options);
     },
     onError: (error, handler) async {
-      if (error.response?.statusCode == 401) {
+      // Only treat as session expiry when the request was authenticated.
+      // Unauthenticated requests (no Authorization header) that return 401
+      // just mean "not logged in" – they must not wipe a freshly registered token.
+      if (error.response?.statusCode == 401 &&
+          error.requestOptions.headers.containsKey('Authorization')) {
         await storage.delete(key: tokenKey);
         ref.read(sessionExpiredProvider.notifier).state = true;
       }

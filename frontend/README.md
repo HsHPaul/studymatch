@@ -114,7 +114,9 @@ Chat öffnet als separater Full-Screen-Route außerhalb der Shell (`/chat/:match
 - **AppColors nicht const:** Da `AppColors` dynamische Getter verwendet, dürfen keine `const`-Konstruktoren mit `AppColors.*` als Argumente verwendet werden.
 - **match_id:** `Match.matchId` enthält die UUID des DB-Match-Datensatzes — wird beim Anlegen von Lernterminen benötigt.
 - **mounted-Checks:** Alle Notifier prüfen `if (!mounted) return` nach jedem `await`.
-- **Provider-Reset:** `AuthNotifier._clearUserData()` invalidiert alle nutzerspezifischen Provider bei Login/Logout — nicht entfernen.
+- **Provider-Reset:** `AuthNotifier._clearUserData()` invalidiert alle nutzerspezifischen Provider bei Login/Logout — nicht entfernen. Wird jetzt auch nach `register()` aufgerufen.
+- **401-Interceptor:** Nur Requests mit `Authorization`-Header lösen Session-Expiry aus. Requests ohne Header (z. B. beim App-Start ohne Token) lösen keinen Logout aus — verhindert Race-Condition beim Registrieren, wenn der Backend-Cold-Start-Response zeitgleich mit dem neuen Token eintrifft.
+- **Dialog-Navigator:** Bei `showDialog` immer den `dialogContext` aus dem Builder-Parameter für `Navigator.of(...).pop()` verwenden — nicht den äußeren Screen-Context. GoRouter-ShellRoute verwendet einen eigenen Navigator; `Navigator.of(screenContext).pop()` würde sonst die Shell-Route statt den Dialog schließen.
 - **Blacklist:** `assets/blacklist.json` muss manuell synchron mit `backend/blacklist.json` gehalten werden — beide Dateien sind identisch aufgebaut.
 - **Zeitauswahl:** Alle `showTimePicker`-Aufrufe nutzen `showTimePicker24h()` aus `core/time_picker_utils.dart` für 24h-Format mit deutschen Labels.
 - **Lokalisierung:** Neue UI-Strings immer in `core/app_localizations.dart` ergänzen (DE + EN) — keine Strings direkt in Widgets hardcoden. Zugriff via `AppLocalizations.of(context)`.
